@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Danh sách phim có phát hành DVD</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .movie { margin-bottom: 20px; }
+        img { width: 150px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Phim có phát hành DVD (từ TMDb API)</h1>
+    <div id="movieList">Đang tải dữ liệu...</div>
+
+    <script>
+        const apiKey = "YOUR_API_KEY"; // 🔑 Thay bằng TMDb API key của bạn
+        const movieListDiv = document.getElementById("movieList");
+
+        async function getPopularMovies(page = 1) {
+            const url = `https://api.themoviedb.org/3/movie/popular?api_key=${apiKey}&page=${page}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            return data.results;
+        }
+
+        async function hasDVDRelease(movieId) {
+            const url = `https://api.themoviedb.org/3/movie/${movieId}/release_dates?api_key=${apiKey}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            for (const region of data.results) {
+                for (const release of region.release_dates) {
+                    if (release.type === 5) { // type 5 = DVD
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        async function showDVDMovies() {
+            movieListDiv.innerHTML = "";
+
+            const movies = await getPopularMovies(); // chỉ lấy 1 page cho demo
+
+            for (const movie of movies) {
+                const isDVD = await hasDVDRelease(movie.id);
+                if (isDVD) {
+                    const poster = movie.poster_path
+                        ? `https://image.tmdb.org/t/p/w200${movie.poster_path}`
+                        : "";
+
+                    movieListDiv.innerHTML += `
+                        <div class="movie">
+                            <h3>${movie.title}</h3>
+                            ${poster ? `<img src="${poster}" alt="${movie.title}">` : ""}
+                        </div>
+                    `;
+                }
+            }
+
+            if (movieListDiv.innerHTML === "") {
+                movieListDiv.innerHTML = "Không có phim nào phát hành DVD trong danh sách.";
+            }
+        }
+
+        showDVDMovies();
+    </script>
+</body>
+</html>

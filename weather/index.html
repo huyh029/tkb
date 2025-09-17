@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Thời tiết theo tên địa điểm</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 40px; }
+    input, button { font-size: 1rem; padding: 10px; }
+    #weather { margin-top: 20px; font-size: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>🌤 Thời tiết theo tên địa điểm</h1>
+  <input type="text" id="city" placeholder="Nhập tên địa điểm (VD: Da Nang)" />
+  <button onclick="getWeather()">Xem thời tiết</button>
+
+  <div id="weather">Chưa có dữ liệu</div>
+
+  <script>
+    async function getWeather() {
+      const city = document.getElementById("city").value.trim();
+      if (!city) return alert("Vui lòng nhập địa điểm!");
+
+      // Gọi geocoding để lấy tọa độ
+      const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}`;
+      const geoRes = await fetch(geoUrl);
+      const geoData = await geoRes.json();
+
+      if (!geoData.results || geoData.results.length === 0) {
+        return document.getElementById("weather").innerText = "Không tìm thấy địa điểm.";
+      }
+
+      const { latitude, longitude, name, country } = geoData.results[0];
+
+      // Gọi weather API với tọa độ vừa tìm
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m&timezone=auto`;
+      const weatherRes = await fetch(weatherUrl);
+      const weatherData = await weatherRes.json();
+
+      const temp = weatherData.current.temperature_2m;
+      const wind = weatherData.current.wind_speed_10m;
+
+      document.getElementById("weather").innerHTML = `
+        📍 <strong>${name}, ${country}</strong><br>
+        🌡️ Nhiệt độ: <strong>${temp}°C</strong><br>
+        💨 Gió: <strong>${wind} km/h</strong>
+      `;
+    }
+  </script>
+</body>
+</html>

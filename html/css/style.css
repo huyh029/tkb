@@ -1,0 +1,24 @@
+.classDiv{
+
+    width: 400px;
+
+    height: 500px;
+
+    background-color: aqua; /*màu nền*/
+
+    border: 2px red solid; /* độ dày - màu - kiểu viền */ 
+
+    border-radius: 20px; /* bo tròn 20px */
+
+    box-shadow: 10px 10px 10px black; /* cách phải - cách trên - độ loang - màu bóng*/
+
+
+    text-align: center;
+    font-size: 30px;
+    font-family: Arial, Helvetica, sans-serif;
+    color: white;
+    text-shadow: 10px 10px 10px yellow;
+}
+#idDiv{
+
+}
