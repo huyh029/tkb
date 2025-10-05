@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chúc mừng sinh nhật 🎉</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --accent:#ff6b6b;
+      --accent2:#ffd166;
+      --card-bg:rgba(255,255,255,0.05);
+    }
+    html,body{
+      height:100%;margin:0;
+      font-family:'Inter',Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:linear-gradient(180deg,var(--bg),#081019);
+      color:#fff;overflow:hidden;
+    }
+    canvas{position:fixed;inset:0;display:block;z-index:0}
+    .ui{
+      position:relative;z-index:2;
+      height:100vh;display:flex;align-items:center;justify-content:center;
+      padding:20px;
+    }
+    .card{
+      width:min(92vw,700px);
+      background:linear-gradient(135deg,var(--card-bg),transparent);
+      padding:32px 20px;border-radius:18px;
+      backdrop-filter:blur(8px) saturate(130%);
+      box-shadow:0 10px 40px rgba(2,6,23,0.6);
+      text-align:center;
+    }
+    h1{
+      margin:0 0 10px;
+      font-size:clamp(26px,8vw,48px);
+      letter-spacing:-0.02em;
+      text-shadow:0 6px 18px rgba(0,0,0,0.6);
+    }
+    .subtitle{
+      font-size:clamp(15px,4vw,18px);
+      opacity:0.9;
+      line-height:1.5;
+    }
+    @media (max-width:600px){
+      .card{padding:24px 16px;}
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="ui">
+  <div class="card">
+    <h1 id="title">Chúc mừng sinh nhật 🎉</h1>
+    <div class="subtitle">
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width = innerWidth;
+  let H = canvas.height = innerHeight;
+
+  const perspective = 800;
+  const baseCount = 400;
+  const burstInterval = 2500; // lặp hiệu ứng mỗi 2.5s
+  let particles = [];
+
+  function rand(a,b){return a + Math.random()*(b-a)}
+
+  class P {
+    constructor(){
+      this.reset(true);
+    }
+    reset(init){
+      this.x = rand(-W*0.6, W*0.6);
+      this.y = rand(-H*0.6, H*0.6);
+      this.z = rand(-perspective/1.6, perspective/1.2);
+      this.vx = rand(-0.15,0.15);
+      this.vy = rand(-0.15,0.15);
+      this.vz = rand(-0.25,0.25);
+      this.size = rand(0.8,3.2);
+      this.h = Math.floor(rand(0,360));
+      this.s = rand(70,95);
+      this.l = rand(45,65);
+    }
+    update(dt){
+      this.x += this.vx * dt * 0.5;
+      this.y += this.vy * dt * 0.5;
+      this.z += this.vz * dt * 0.5;
+      if(this.z > perspective*1.2 || this.z < -perspective*1.6) this.reset();
+    }
+    project(){
+      const scale = perspective / (perspective + this.z);
+      this.screenX = this.x * scale + W/2;
+      this.screenY = this.y * scale + H/2;
+      this.alpha = Math.min(1, scale*1.2);
+      this.r = this.size * scale * 1.4;
+    }
+    draw(ctx){
+  const r = Math.max(0.1, Math.abs(this.r)); // đảm bảo bán kính dương
+  const g = ctx.createRadialGradient(
+    this.screenX, this.screenY, 0,
+    this.screenX, this.screenY, r * 3
+  );
+  g.addColorStop(0, `hsla(${this.h},${this.s}%,${this.l}%,1)`);
+  g.addColorStop(1, `hsla(${this.h},${this.s}%,${this.l}%,0)`);
+  ctx.globalAlpha = this.alpha;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(this.screenX, this.screenY, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+  }
+
+  function init(n=baseCount){
+    particles = [];
+    for(let i=0;i<n;i++) particles.push(new P());
+  }
+
+  init();
+  let last = performance.now();
+
+  function draw(){
+    const now = performance.now();
+    const dt = Math.min(40, now-last);
+    last = now;
+    // nền gradient động
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    const t = now * 0.0002;
+    bg.addColorStop(0, `hsl(${(t*360)%360},50%,7%)`);
+    bg.addColorStop(1, `hsl(${(t*360+120)%360},60%,10%)`);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,W,H);
+
+    for(let p of particles){ p.update(dt); p.project(); p.draw(ctx); }
+    requestAnimationFrame(draw);
+  }
+
+  draw();
+
+  // tự động "nổ pháo hạt" mỗi 2.5s
+  setInterval(()=>{
+    for(let i=0;i<100;i++){
+      const p = new P();
+      p.x = rand(-40,40);
+      p.y = rand(-40,40);
+      p.z = rand(-100,200);
+      p.vx = rand(-3,3);
+      p.vy = rand(-3,3);
+      p.vz = rand(-6,6);
+      particles.push(p);
+    }
+    // hiệu ứng rung nhẹ chữ
+    const title = document.getElementById('title');
+    title.style.transition='transform .4s ease';
+    title.style.transform='scale(1.05)';
+    setTimeout(()=>title.style.transform='scale(1)',400);
+  }, burstInterval);
+
+  addEventListener('resize',()=>{W=canvas.width=innerWidth;H=canvas.height=innerHeight;});
+})();
+</script>
+
+</body>
+</html>
