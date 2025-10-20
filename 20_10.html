@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thiệp 20 Tháng 10</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100%;
+      height: 100vh;
+      background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 50%, #ffcccc 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden;
+    }
+
+    .particles-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .particle {
+      position: fixed;
+      font-size: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      position: relative;
+      width: 400px;
+      height: 500px;
+      background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(220, 38, 38, 0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      z-index: 10;
+      text-align: center;
+    }
+
+    .decoration {
+      position: absolute;
+      font-size: 40px;
+      animation: bounce 2s infinite;
+    }
+
+    .decoration:nth-child(1) {
+      top: 30px;
+      left: 30px;
+      animation-duration: 2s;
+    }
+
+    .decoration:nth-child(2) {
+      top: 30px;
+      right: 30px;
+      animation-duration: 2.3s;
+    }
+
+    .decoration:nth-child(3) {
+      bottom: 30px;
+      left: 50px;
+      animation-duration: 2.6s;
+    }
+
+    .decoration:nth-child(4) {
+      bottom: 30px;
+      right: 50px;
+      animation-duration: 2.9s;
+    }
+
+    @keyframes bounce {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-15px);
+      }
+    }
+
+    .content {
+      position: relative;
+      z-index: 10;
+    }
+
+    h1 {
+      font-size: 48px;
+      background: linear-gradient(90deg, #cc0000, #ff0000, #ff3333);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+
+    .subtitle {
+      font-size: 24px;
+      color: #cc0000;
+      font-weight: 600;
+      margin-bottom: 30px;
+    }
+
+    .message {
+      font-size: 18px;
+      color: #333;
+      line-height: 1.8;
+      margin-bottom: 20px;
+    }
+
+    .message p {
+      margin-bottom: 15px;
+    }
+
+    .message .highlight {
+      color: #cc0000;
+      font-style: italic;
+    }
+
+    .message .hint {
+      font-size: 14px;
+      color: #666;
+      margin-top: 15px;
+    }
+
+    .footer {
+      color: #cc0000;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+  </style>
+
+
+  </style>
+</head>
+<body>
+  <div class="particles-container" id="particlesContainer"></div>
+
+  <div class="card">
+    <div class="decoration">🌹</div>
+    <div class="decoration">💐</div>
+    <div class="decoration">🌸</div>
+    <div class="decoration">❤️</div>
+
+    <div class="content">
+      <h1>20 Tháng 10</h1>
+      <p class="subtitle">Chúc mẹ 20/10</p>
+      
+      <div class="message">
+        <p class="highlight">Chúc mẹ luôn tràn đầy sức khỏe,</p>
+        <p class="highlight">Hạnh phúc và nụ cười rạng rỡ!</p>
+        <p class="hint">🌹  🌹</p>
+      </div>
+      
+      <p class="footer">❤️</p>
+    </div>
+  </div>
+
+  <script>
+    const particles = [];
+    const emojis = ['🌹', '🌸', '❤️', '💕', '🌺'];
+    const container = document.getElementById('particlesContainer');
+
+    function createFireworks() {
+      const newParticles = [];
+      
+      // Tạo 3 bông hoa ở vị trí random
+      for (let burst = 0; burst < 3; burst++) {
+        const x = Math.random() * window.innerWidth;
+        const y = Math.random() * window.innerHeight;
+
+        for (let i = 0; i < 35; i++) {
+          const angle = (Math.PI * 2 * i) / 35;
+          const velocity = 3 + Math.random() * 5;
+          const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+          const particle = {
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * velocity,
+            vy: Math.sin(angle) * velocity,
+            emoji: emoji,
+            life: 1,
+            maxLife: 2 + Math.random() * 0.8,
+            element: null
+          };
+
+          // Tạo element
+          const el = document.createElement('div');
+          el.className = 'particle';
+          el.textContent = emoji;
+          el.style.left = x + 'px';
+          el.style.top = y + 'px';
+          el.style.filter = 'drop-shadow(0 0 8px rgba(255, 0, 0, 0.6))';
+          container.appendChild(el);
+          particle.element = el;
+
+          newParticles.push(particle);
+        }
+      }
+
+      particles.push(...newParticles);
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.life -= 0.02;
+
+        if (p.element) {
+          p.element.style.left = p.x + 'px';
+          p.element.style.top = p.y + 'px';
+          p.element.style.opacity = Math.max(0, p.life / p.maxLife);
+          const scale = 0.8 + (1 - p.life / p.maxLife) * 0.5;
+          p.element.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        }
+
+        if (p.life <= 0) {
+          if (p.element && p.element.parentNode) {
+            p.element.parentNode.removeChild(p.element);
+          }
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    // Cập nhật particles mỗi 30ms
+    setInterval(updateParticles, 30);
+
+    // Tạo pháo mỗi 600ms
+    setInterval(createFireworks, 600);
+
+    // Tạo pháo ban đầu
+    createFireworks();
+  </script>
+</body>
+</html>
