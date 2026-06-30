@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeetNow - Audio Meeting</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<link rel="icon" href="icon.png" type="image/png">
+<style>
+  :root{
+    --bg:#0a1628;
+    --panel:#10203a;
+    --panel2:#15294a;
+    --accent:#2f8fff;
+    --accent2:#1565d8;
+    --text:#e8f1ff;
+    --muted:#7fa3cf;
+    --danger:#ff5b6e;
+    --good:#3ddc97;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 800px at 20% -10%, #16335e 0%, var(--bg) 60%);
+    color:var(--text);
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 24px;
+    background:rgba(23,26,33,0.7);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid #1d3a63;
+  }
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;}
+  .logo img{width:32px;height:32px;border-radius:8px;object-fit:cover;}
+  .logo .dot{width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));}
+  .room-badge{
+    font-size:13px;color:var(--muted);
+    background:var(--panel2);padding:6px 12px;border-radius:20px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .room-badge button{
+    background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;
+  }
+
+  /* LOBBY */
+  #lobby{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    padding:24px;
+    background-image:url('background.png');
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    position:relative;
+  }
+  #lobby::before{
+    content:'';position:absolute;inset:0;
+    background:rgba(10,22,40,0.35);
+  }
+  #lobby .card{position:relative;z-index:1;}
+  .card{
+    background:rgba(16,32,58,0.92);
+    backdrop-filter:blur(6px);
+    border:1px solid #1d3a63;
+    border-radius:var(--radius);
+    padding:36px;
+    width:100%;max-width:420px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.55);
+  }
+  .card-logo{display:flex;justify-content:center;margin-bottom:18px;}
+  .card-logo img{width:72px;height:72px;border-radius:18px;object-fit:cover;box-shadow:0 8px 24px rgba(47,143,255,0.35);}
+  .card-logo-fallback{
+    width:72px;height:72px;border-radius:18px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-size:30px;font-weight:800;color:#fff;
+    box-shadow:0 8px 24px rgba(47,143,255,0.35);
+  }
+  .card h1{margin:0 0 6px;font-size:22px;text-align:center;}
+  .card p.sub{color:var(--muted);margin:0 0 24px;font-size:14px;text-align:center;}
+
+  .avatar-upload-wrap{
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    margin-top:16px;
+  }
+  .avatar-upload-circle{
+    width:84px;height:84px;border-radius:50%;
+    background:var(--panel2);border:2px dashed #26456f;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;position:relative;overflow:hidden;
+    transition:border-color .15s, transform .15s;
+    flex-shrink:0;
+  }
+  .avatar-upload-circle:hover{border-color:var(--accent);transform:scale(1.03);}
+  .avatar-upload-circle img{width:100%;height:100%;object-fit:cover;}
+  .avatar-upload-circle .placeholder-icon{font-size:26px;color:var(--muted);}
+  .avatar-upload-circle .cam-badge{
+    position:absolute;bottom:2px;right:2px;
+    width:26px;height:26px;border-radius:50%;
+    background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;border:2px solid var(--panel);
+  }
+  .avatar-upload-hint{font-size:12px;color:var(--muted);text-align:center;}
+  .avatar-upload-hint button{
+    background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;padding:0;
+  }
+  #avatarFileInput{display:none;}
+
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px;margin-top:16px;}
+  input[type=text]{
+    width:100%;padding:12px 14px;border-radius:10px;
+    border:1px solid #26456f;background:#0c1b32;color:var(--text);
+    font-size:15px;outline:none;
+  }
+  input[type=text]:focus{border-color:var(--accent);}
+  .btn-row{display:flex;gap:10px;margin-top:24px;}
+  button.primary{
+    flex:1;padding:13px;border:none;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#fff;font-weight:600;font-size:15px;cursor:pointer;
+    transition:transform .15s, opacity .15s;
+  }
+  button.primary:hover{opacity:.92;transform:translateY(-1px);}
+  button.secondary{
+    flex:1;padding:13px;border-radius:10px;
+    background:transparent;border:1px solid #26456f;color:var(--text);
+    font-weight:600;font-size:15px;cursor:pointer;
+  }
+  button.secondary:hover{border-color:var(--accent);}
+  .mic-preview-wrap{
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    width:100%;padding:24px 0;
+    background:#0c1b32;border-radius:12px;margin-top:18px;
+    border:1px solid #1d3a63;
+  }
+  .mic-level-circle{
+    width:80px;height:80px;border-radius:50%;
+    background:var(--panel2);display:flex;align-items:center;justify-content:center;
+    font-size:32px;position:relative;
+  }
+  .mic-level-circle .ring{
+    position:absolute;inset:-6px;border-radius:50%;
+    border:3px solid var(--good);opacity:0;transition:opacity .1s, transform .1s;
+  }
+  .my-id-tip{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;}
+  .my-id-tip b{color:var(--text);}
+
+  /* MEETING ROOM */
+  #room{flex:1;display:none;flex-direction:column;overflow:hidden;}
+  #mainArea{
+    flex:1;display:flex;flex-direction:row;justify-content:flex-end;gap:14px;
+    padding:20px;overflow:hidden;min-height:0;
+  }
+
+  /* screen share area (only visible when something is shared) */
+  #screenArea{
+    display:none;flex:1;min-height:0;
+    background:#000;border-radius:var(--radius);border:1px solid #1d3a63;
+    overflow:hidden;position:relative;
+  }
+  #screenArea.has-share{display:flex;}
+  .video-tile.screen-tile{
+    width:100%;height:100%;position:relative;
+    display:flex;align-items:center;justify-content:center;background:#000;
+  }
+  .video-tile.screen-tile video{width:100%;height:100%;object-fit:contain;background:#000;}
+  .video-tile.screen-tile .tag{
+    position:absolute;left:12px;bottom:12px;
+    background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);
+    padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600;
+  }
+
+  /* sidebar chứa danh sách thành viên, có thể thu gọn */
+  #memberSidebar{
+    flex-shrink:0;display:flex;flex-direction:column;gap:8px;
+    width:280px;transition:width .2s ease;
+  }
+  #memberSidebar.collapsed{width:48px;}
+  #sidebarToggle{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    background:var(--panel2);border:1px solid #1d3a63;border-radius:10px;
+    padding:8px 12px;cursor:pointer;font-size:13px;font-weight:600;
+    flex-shrink:0;user-select:none;
+  }
+  #memberSidebar.collapsed #sidebarToggle{justify-content:center;padding:8px;}
+  #sidebarToggle .count-badge{
+    background:var(--accent);color:#fff;border-radius:10px;
+    font-size:11px;padding:2px 7px;flex-shrink:0;
+  }
+  #sidebarToggle .toggle-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #memberSidebar.collapsed #sidebarToggle .toggle-label{display:none;}
+  #sidebarToggle .arrow{transition:transform .2s ease;flex-shrink:0;}
+  #memberSidebar.collapsed #sidebarToggle .arrow{transform:rotate(180deg);}
+
+  /* compact member list - vertical */
+  #memberList{
+    display:flex;flex-direction:column;gap:6px;
+    flex-shrink:0;width:100%;
+    overflow-y:auto;
+  }
+  #memberSidebar.collapsed #memberList{display:none;}
+  .member-row{
+    display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid #1d3a63;border-radius:10px;
+    padding:8px 14px 8px 8px;
+    font-size:13px;font-weight:600;
+    min-width:0;width:100%;
+  }
+  .member-row .avatar-circle{
+    width:28px;height:28px;font-size:12px;flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:700;color:#fff;
+  }
+  .member-row .name{
+    flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .member-row .mic-icon{width:8px;height:8px;border-radius:50%;background:var(--good);flex-shrink:0;}
+  .member-row .mic-icon.off{background:var(--danger);}
+  .member-row.mine{border-color:var(--accent);}
+  .member-row .edit-btn{
+    background:none;border:none;color:var(--muted);cursor:pointer;
+    font-size:13px;flex-shrink:0;padding:2px 4px;border-radius:6px;
+    line-height:1;
+  }
+  .member-row .edit-btn:hover{color:var(--accent);background:var(--panel2);}
+
+  .edit-popover{
+    position:absolute;z-index:30;
+    background:var(--panel);border:1px solid #26456f;border-radius:12px;
+    padding:14px;width:230px;
+    box-shadow:0 16px 40px rgba(0,0,0,0.5);
+  }
+  .edit-popover .ep-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .edit-popover .ep-avatar{
+    width:48px;height:48px;border-radius:50%;flex-shrink:0;cursor:pointer;
+    background:var(--panel2);border:2px dashed #26456f;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;
+    font-size:18px;color:var(--muted);
+  }
+  .edit-popover .ep-avatar img{width:100%;height:100%;object-fit:cover;}
+  .edit-popover input[type=text]{
+    width:100%;padding:8px 10px;border-radius:8px;
+    border:1px solid #26456f;background:#0c1b32;color:var(--text);font-size:13px;outline:none;
+  }
+  .edit-popover input[type=text]:focus{border-color:var(--accent);}
+  .edit-popover .ep-actions{display:flex;gap:8px;margin-top:10px;}
+  .edit-popover .ep-actions button{
+    flex:1;padding:8px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;
+  }
+  .edit-popover .ep-save{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;}
+  .edit-popover .ep-cancel{background:var(--panel2);color:var(--text);}
+
+  #controls{
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    padding:18px;background:rgba(23,26,33,0.85);
+    border-top:1px solid #1d3a63;
+  }
+  .ctrl-btn{
+    width:52px;height:52px;border-radius:50%;border:1px solid #26456f;
+    background:var(--panel2);color:var(--text);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:20px;
+    transition:background .15s;
+  }
+  .ctrl-btn:hover{background:#262b3a;}
+  .ctrl-btn.off{background:var(--danger);border-color:var(--danger);}
+  .ctrl-btn.active{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:var(--accent);}
+  .ctrl-btn.leave{background:var(--danger);border-color:var(--danger);width:auto;border-radius:26px;padding:0 22px;font-size:15px;font-weight:600;gap:8px;}
+  .ctrl-btn.leave:hover{opacity:.9;}
+
+  #toast{
+    position:fixed;top:18px;left:50%;transform:translateX(-50%);
+    background:var(--panel2);border:1px solid #26456f;padding:10px 18px;
+    border-radius:10px;font-size:13px;display:none;z-index:50;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:#26456f;border-radius:4px;}
+  @media(max-width:560px){
+    .card{padding:24px;}
+    header{padding:12px 16px;}
+    .video-tile.screen-tile{grid-column:span 1;}
+    #mainArea{flex-direction:column;}
+    #memberSidebar{width:100%;}
+    #memberSidebar.collapsed{width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <img src="logo.jpg" alt="Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">
+    <span class="dot" style="display:none;"></span> MeetNow
+  </div>
+  <div class="room-badge" id="roomBadge" style="display:none;">
+    Phòng: <b id="roomLabel"></b>
+    <button onclick="copyLink()">Sao chép link mời</button>
+  </div>
+</header>
+
+<div id="toast"></div>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="card">
+    <div class="card-logo">
+      <img src="logo.jpg" alt="Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+      <div class="card-logo-fallback" style="display:none;">M</div>
+    </div>
+    <h1>Phòng họp nội bộ</h1>
+    <p class="sub">Cuộc họp âm thanh (mic) — không dùng camera. Phòng cố định, mọi người vào cùng một phòng duy nhất.</p>
+
+    <div class="mic-preview-wrap" style="display:none;">
+      <div class="mic-level-circle">
+        🎤
+        <div class="ring" id="micRing"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);">Kiểm tra micro của bạn</div>
+    </div>
+
+    <div class="avatar-upload-wrap">
+      <div class="avatar-upload-circle" onclick="document.getElementById('avatarFileInput').click()" id="avatarCircle">
+        <span class="placeholder-icon" id="avatarPlaceholder">🙂</span>
+        <span class="cam-badge">📷</span>
+      </div>
+      <input type="file" id="avatarFileInput" accept="image/*" onchange="handleAvatarUpload(event)">
+      <div class="avatar-upload-hint">
+        Ảnh đại diện (không bắt buộc) — <button onclick="event.stopPropagation();document.getElementById('avatarFileInput').click()">chọn ảnh</button>
+        <span id="removeAvatarBtnWrap" style="display:none;"> hoặc <button onclick="event.stopPropagation();removeAvatar()">xóa</button></span>
+      </div>
+    </div>
+
+    <label>Tên của bạn</label>
+    <input type="text" id="nameInput" placeholder="Nhập tên hiển thị...">
+
+    <div class="btn-row">
+      <button class="primary" onclick="enterFixedRoom()" style="flex:1;">Vào phòng họp</button>
+    </div>
+    <div class="my-id-tip">Mã phòng: <b id="fixedRoomLabel"></b> — không cần nhập hay tạo phòng, ai vào cũng vào chung phòng này.</div>
+    <div class="my-id-tip" id="rememberedTip" style="display:none;">Đã ghi nhớ tên <b id="rememberedName"></b> trên thiết bị này. <button onclick="forgetName()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-weight:600;padding:0;font-size:12px;">Không phải bạn? Đổi tên</button></div>
+  </div>
+</div>
+
+<!-- ROOM -->
+<div id="room">
+  <div id="mainArea">
+    <div id="screenArea"></div>
+    <div id="memberSidebar" class="collapsed">
+      <div id="sidebarToggle" onclick="toggleSidebar()">
+        <span class="toggle-label">Thành viên</span>
+        <span class="count-badge" id="memberCount">0</span>
+        <span class="arrow">◀</span>
+      </div>
+      <div id="memberList"></div>
+    </div>
+  </div>
+  <div id="controls">
+    <button class="ctrl-btn" id="micBtn" onclick="toggleMic()">🎤</button>
+    <button class="ctrl-btn" id="screenBtn" onclick="toggleScreenShare()">🖥️</button>
+    <button class="ctrl-btn leave" onclick="leaveRoom()">📞 Rời cuộc họp</button>
+  </div>
+</div>
+
+<script>
+let localStream, screenStream, peer, myId;
+let connections = {};       // peerId -> audio call
+let screenConnections = {}; // peerId -> screen call (outgoing, when I'm sharing)
+let micOn = true;
+let isSharingScreen = false;
+let displayName = "Bạn";
+let roomId = "";
+
+const memberListEl = document.getElementById('memberList');
+const memberSidebarEl = document.getElementById('memberSidebar');
+
+function toggleSidebar(){
+  memberSidebarEl.classList.toggle('collapsed');
+}
+function updateMemberCount(){
+  const c = memberListEl.children.length;
+  const badge = document.getElementById('memberCount');
+  if(badge) badge.textContent = c;
+}
+const screenAreaEl = document.getElementById('screenArea');
+
+function toast(msg, ms=2500){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._tm);
+  t._tm = setTimeout(()=> t.style.display='none', ms);
+}
+
+function initials(name){
+  return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(-2).join('').toUpperCase();
+}
+
+// mic level meter for lobby preview
+let lobbyStream;
+async function initMicPreview(){
+  try{
+    lobbyStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(lobbyStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const ring = document.getElementById('micRing');
+    function tick(){
+      if(!document.getElementById('lobby') || document.getElementById('lobby').style.display === 'none') return;
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      const scale = 1 + Math.min(avg/60, 0.6);
+      ring.style.opacity = avg > 8 ? 1 : 0;
+      ring.style.transform = `scale(${scale})`;
+      requestAnimationFrame(tick);
+    }
+    tick();
+  }catch(e){
+    toast("Không thể truy cập micro: " + e.message, 4000);
+  }
+}
+initMicPreview();
+
+// Mã phòng cố định cho app nội bộ - không cần tạo hay nhập
+const FIXED_ROOM_ID = 'noi-bo-meeting-2026';
+// ===== Cookie helpers (ghi nhớ tên trên thiết bị này) =====
+const NAME_COOKIE = 'meetnow_name';
+
+function setCookie(name, value, days){
+  const d = new Date();
+  d.setTime(d.getTime() + days*24*60*60*1000);
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/;SameSite=Lax`;
+}
+function getCookie(name){
+  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+function deleteCookie(name){
+  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+}
+function forgetName(){
+  deleteCookie(NAME_COOKIE);
+  document.getElementById('nameInput').value = '';
+  document.getElementById('rememberedTip').style.display = 'none';
+  toast('Đã xóa tên đã lưu trên thiết bị này');
+}
+
+// ===== Avatar (ảnh đại diện, không bắt buộc) =====
+const AVATAR_STORAGE_KEY = 'meetnow_avatar';
+let avatarDataUrl = null;
+
+function handleAvatarUpload(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ toast('Vui lòng chọn một file ảnh'); return; }
+  if(file.size > 2*1024*1024){ toast('Ảnh quá lớn, vui lòng chọn ảnh dưới 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    avatarDataUrl = reader.result;
+    showAvatarPreview(avatarDataUrl);
+    try{ localStorage.setItem(AVATAR_STORAGE_KEY, avatarDataUrl); }catch(err){ console.warn('Không thể lưu avatar:', err); }
+  };
+  reader.readAsDataURL(file);
+}
+
+function showAvatarPreview(dataUrl){
+  const circle = document.getElementById('avatarCircle');
+  const placeholder = document.getElementById('avatarPlaceholder');
+  let img = circle.querySelector('img');
+  if(!img){
+    img = document.createElement('img');
+    circle.insertBefore(img, circle.firstChild);
+  }
+  img.src = dataUrl;
+  if(placeholder) placeholder.style.display = 'none';
+  document.getElementById('removeAvatarBtnWrap').style.display = 'inline';
+}
+
+function removeAvatar(){
+  avatarDataUrl = null;
+  localStorage.removeItem(AVATAR_STORAGE_KEY);
+  const circle = document.getElementById('avatarCircle');
+  const img = circle.querySelector('img');
+  if(img) img.remove();
+  const placeholder = document.getElementById('avatarPlaceholder');
+  if(placeholder) placeholder.style.display = 'block';
+  document.getElementById('removeAvatarBtnWrap').style.display = 'none';
+  document.getElementById('avatarFileInput').value = '';
+  toast('Đã xóa ảnh đại diện');
+}
+
+// ===== Popover sửa tên / ảnh đại diện ngay trong danh sách thành viên =====
+let editPopoverEl = null;
+let editPopoverAvatarPreview = null;
+
+function closeEditPopover(){
+  if(editPopoverEl){ editPopoverEl.remove(); editPopoverEl = null; }
+  document.removeEventListener('mousedown', handleOutsideEditClick, true);
+}
+
+function handleOutsideEditClick(e){
+  if(editPopoverEl && !editPopoverEl.contains(e.target)){
+    closeEditPopover();
+  }
+}
+
+function openEditPopover(evt){
+  evt.stopPropagation();
+  closeEditPopover();
+
+  const btn = evt.currentTarget;
+  editPopoverAvatarPreview = avatarDataUrl;
+
+  const pop = document.createElement('div');
+  pop.className = 'edit-popover';
+  pop.innerHTML = `
+    <div class="ep-row">
+      <div class="ep-avatar" id="epAvatarCircle">
+        ${avatarDataUrl ? `<img src="${avatarDataUrl}">` : `<span>🙂</span>`}
+      </div>
+      <input type="text" id="epNameInput" placeholder="Tên hiển thị" value="${displayName.replace(/"/g,'&quot;')}">
+    </div>
+    <input type="file" id="epAvatarFile" accept="image/*" style="display:none;">
+    <div class="ep-actions">
+      <button class="ep-cancel" onclick="closeEditPopover()">Hủy</button>
+      <button class="ep-save" onclick="saveEditPopover()">Lưu</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+
+  // định vị popover gần nút bấm
+  const rect = btn.getBoundingClientRect();
+  const popWidth = 230;
+  let left = rect.left - popWidth + rect.width;
+  if(left < 8) left = 8;
+  let top = rect.bottom + 8;
+  if(top + 180 > window.innerHeight) top = rect.top - 180;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+
+  document.getElementById('epAvatarCircle').onclick = ()=> document.getElementById('epAvatarFile').click();
+  document.getElementById('epAvatarFile').onchange = (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(!file.type.startsWith('image/')){ toast('Vui lòng chọn một file ảnh'); return; }
+    if(file.size > 2*1024*1024){ toast('Ảnh quá lớn, vui lòng chọn ảnh dưới 2MB'); return; }
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      editPopoverAvatarPreview = reader.result;
+      document.getElementById('epAvatarCircle').innerHTML = `<img src="${editPopoverAvatarPreview}">`;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  editPopoverEl = pop;
+  setTimeout(()=> document.addEventListener('mousedown', handleOutsideEditClick, true), 0);
+  document.getElementById('epNameInput').focus();
+}
+
+function saveEditPopover(){
+  const newName = document.getElementById('epNameInput').value.trim();
+  if(!newName){ toast('Vui lòng nhập tên'); return; }
+
+  displayName = newName;
+  avatarDataUrl = editPopoverAvatarPreview || null;
+
+  // lưu vào cookie / localStorage
+  setCookie(NAME_COOKIE, displayName, 365);
+  if(avatarDataUrl){
+    try{ localStorage.setItem(AVATAR_STORAGE_KEY, avatarDataUrl); }catch(err){ console.warn(err); }
+  }else{
+    localStorage.removeItem(AVATAR_STORAGE_KEY);
+  }
+
+  // cập nhật hiển thị ngay trong danh sách thành viên
+  const nameLabel = document.getElementById('myNameLabel');
+  if(nameLabel) nameLabel.textContent = displayName + " (Bạn)";
+  const avatarSlot = document.getElementById('myAvatarImg');
+  if(avatarSlot){
+    if(avatarDataUrl){
+      const img = document.createElement('img');
+      img.className = 'avatar-circle';
+      img.id = 'myAvatarImg';
+      img.style.objectFit = 'cover';
+      img.src = avatarDataUrl;
+      avatarSlot.replaceWith(img);
+    }else{
+      const span = document.createElement('span');
+      span.className = 'avatar-circle';
+      span.id = 'myAvatarImg';
+      span.textContent = initials(displayName);
+      avatarSlot.replaceWith(span);
+    }
+  }
+
+  // đồng bộ lại với form ở lobby (phòng khi rời họp rồi vào lại)
+  document.getElementById('nameInput').value = displayName;
+  if(avatarDataUrl) showAvatarPreview(avatarDataUrl); else removeAvatarPreviewOnly();
+
+  toast('Đã lưu thay đổi (tên/ảnh hiện tại chỉ cập nhật cho riêng bạn, người khác sẽ thấy sau khi vào lại phòng)');
+  closeEditPopover();
+}
+
+function removeAvatarPreviewOnly(){
+  const circle = document.getElementById('avatarCircle');
+  if(!circle) return;
+  const img = circle.querySelector('img');
+  if(img) img.remove();
+  const placeholder = document.getElementById('avatarPlaceholder');
+  if(placeholder) placeholder.style.display = 'block';
+  const wrap = document.getElementById('removeAvatarBtnWrap');
+  if(wrap) wrap.style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const lbl = document.getElementById('fixedRoomLabel');
+  if(lbl) lbl.textContent = FIXED_ROOM_ID;
+
+  try{
+    const savedAvatar = localStorage.getItem(AVATAR_STORAGE_KEY);
+    if(savedAvatar){
+      avatarDataUrl = savedAvatar;
+      showAvatarPreview(savedAvatar);
+    }
+  }catch(err){ console.warn('Không thể đọc avatar đã lưu:', err); }
+
+  const savedName = getCookie(NAME_COOKIE);
+  if(savedName){
+    document.getElementById('nameInput').value = savedName;
+    document.getElementById('rememberedTip').style.display = 'block';
+    document.getElementById('rememberedName').textContent = savedName;
+    // đã từng nhập tên trước đó -> tự động vào thẳng phòng, không cần bấm lại
+    displayName = savedName;
+    enterFixedRoom();
+  }
+});
+
+function enterFixedRoom(){
+  roomId = FIXED_ROOM_ID;
+  enterRoom();
+}
+
+async function enterRoom(){
+  if(lobbyStream){
+    localStream = lobbyStream;
+  }else{
+    try{
+      localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    }catch(e){
+      toast("Cần cấp quyền micro để vào họp"); return;
+    }
+  }
+
+  const n = document.getElementById('nameInput').value.trim();
+  if(n) displayName = n;
+  if(displayName && displayName !== 'Bạn'){
+    setCookie(NAME_COOKIE, displayName, 365);
+  }
+
+  // Thử nhận làm host (giữ đúng mã phòng cố định). Nếu phòng đã có người
+  // (mã đã bị chiếm), tự động chuyển sang vai trò guest và gọi vào host.
+  tryConnect(true);
+}
+
+function tryConnect(asHost){
+  const myPeerId = asHost ? roomId : (roomId + '-' + Math.random().toString(36).substring(2,8));
+
+  peer = new Peer(myPeerId, { debug: 1 });
+
+  peer.on('open', id=>{
+    myId = id;
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('room').style.display = 'flex';
+    document.getElementById('roomBadge').style.display = 'flex';
+    document.getElementById('roomLabel').textContent = roomId;
+    addMemberRow('me', displayName + " (Bạn)", true, null, avatarDataUrl);
+
+    if(!asHost){
+      const call = peer.call(roomId, localStream, {metadata:{name:displayName, kind:'audio', avatar:avatarDataUrl}});
+      handleAudioCall(call);
+    }
+    toast("Đã vào phòng họp");
+  });
+
+  peer.on('call', call=>{
+    const kind = call.metadata && call.metadata.kind;
+    if(kind === 'screen'){
+      call.answer();
+      call.on('stream', remoteStream=>{
+        const name = (call.metadata && call.metadata.name) || call.peer;
+        addScreenTile(call.peer, remoteStream, name);
+      });
+      call.on('close', ()=> removeTile('screen-'+call.peer));
+    }else{
+      call.answer(localStream);
+      handleAudioCall(call);
+      if(isSharingScreen && screenStream){
+        const sCall = peer.call(call.peer, screenStream, {metadata:{name:displayName, kind:'screen'}});
+        screenConnections[call.peer] = sCall;
+      }
+    }
+  });
+
+  peer.on('error', err=>{
+    console.error(err);
+    if(err.type === 'unavailable-id' && asHost){
+      // mã phòng đã có người giữ -> tự động vào với vai trò guest
+      peer.destroy();
+      tryConnect(false);
+    }else if(err.type === 'peer-unavailable'){
+      toast("Không kết nối được tới phòng, đang thử lại...");
+      setTimeout(()=> tryConnect(false), 1500);
+    }else{
+      toast("Lỗi kết nối: " + err.type);
+    }
+  });
+}
+
+function handleAudioCall(call){
+  call.on('stream', remoteStream=>{
+    const name = (call.metadata && call.metadata.name) || call.peer;
+    const avatar = call.metadata && call.metadata.avatar;
+    addMemberRow(call.peer, name, false, remoteStream, avatar);
+  });
+  call.on('close', ()=>{
+    removeTile('tile-'+call.peer);
+    removeTile('screen-'+call.peer);
+  });
+  connections[call.peer] = call;
+}
+
+function addMemberRow(id, label, isMine, remoteStream, avatar){
+  if(document.getElementById('tile-'+id)) return;
+  const row = document.createElement('div');
+  row.className = 'member-row' + (isMine ? ' mine':'');
+  row.id = 'tile-'+id;
+  const avatarHtml = avatar
+    ? `<img class="avatar-circle" src="${avatar}" style="object-fit:cover;" id="${isMine?'myAvatarImg':''}">`
+    : `<span class="avatar-circle" id="${isMine?'myAvatarImg':''}">${initials(label)}</span>`;
+  const editBtnHtml = isMine ? `<button class="edit-btn" onclick="openEditPopover(event)" title="Sửa tên / ảnh đại diện">✏️</button>` : '';
+  row.innerHTML = `${avatarHtml}
+    <span class="name" id="${isMine?'myNameLabel':''}">${label}</span>
+    ${editBtnHtml}
+    <span class="mic-icon" id="mic-${id}"></span>`;
+  if(remoteStream){
+    const audioEl = document.createElement('audio');
+    audioEl.autoplay = true;
+    audioEl.srcObject = remoteStream;
+    row.appendChild(audioEl);
+  }
+  memberListEl.appendChild(row);
+  updateMemberCount();
+}
+
+function addScreenTile(id, stream, label){
+  const existing = document.getElementById('screen-'+id);
+  if(existing) existing.remove();
+  const tile = document.createElement('div');
+  tile.className = 'video-tile screen-tile';
+  tile.id = 'screen-'+id;
+  tile.innerHTML = `<video autoplay playsinline></video>
+    <div class="tag">🖥️ ${label} đang chia sẻ màn hình</div>`;
+  tile.querySelector('video').srcObject = stream;
+  screenAreaEl.appendChild(tile);
+  screenAreaEl.classList.add('has-share');
+}
+
+function removeTile(domId){
+  const t = document.getElementById(domId);
+  if(t) t.remove();
+  if(screenAreaEl.children.length === 0) screenAreaEl.classList.remove('has-share');
+  updateMemberCount();
+}
+
+function toggleMic(){
+  if(!localStream) return;
+  micOn = !micOn;
+  localStream.getAudioTracks().forEach(t=> t.enabled = micOn);
+  document.getElementById('micBtn').classList.toggle('off', !micOn);
+  document.getElementById('micBtn').textContent = micOn ? '🎤' : '🔇';
+  const dot = document.getElementById('mic-me');
+  if(dot) dot.classList.toggle('off', !micOn);
+}
+
+async function toggleScreenShare(){
+  if(!isSharingScreen){
+    try{
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:false });
+    }catch(e){
+      toast("Đã hủy chia sẻ màn hình"); return;
+    }
+    isSharingScreen = true;
+    document.getElementById('screenBtn').classList.add('active');
+    addScreenTile('me', screenStream, displayName + " (Bạn)");
+
+    Object.keys(connections).forEach(peerId=>{
+      const sCall = peer.call(peerId, screenStream, {metadata:{name:displayName, kind:'screen'}});
+      screenConnections[peerId] = sCall;
+    });
+
+    screenStream.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
+  }else{
+    stopScreenShare();
+  }
+}
+
+function stopScreenShare(){
+  isSharingScreen = false;
+  document.getElementById('screenBtn').classList.remove('active');
+  removeTile('screen-me');
+  screenAreaEl.classList.remove('has-share');
+  Object.values(screenConnections).forEach(c=>c.close());
+  screenConnections = {};
+  if(screenStream){
+    screenStream.getTracks().forEach(t=>t.stop());
+    screenStream = null;
+  }
+}
+
+function leaveRoom(){
+  stopScreenShare();
+  Object.values(connections).forEach(c=>c.close());
+  connections = {};
+  if(peer) peer.destroy();
+  memberListEl.innerHTML = ''; screenAreaEl.innerHTML = ''; screenAreaEl.classList.remove('has-share'); updateMemberCount();
+  document.getElementById('room').style.display = 'none';
+  document.getElementById('roomBadge').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+}
+
+function copyLink(){
+  const url = location.origin + location.pathname;
+  navigator.clipboard.writeText(url).then(()=> toast("Đã sao chép link! Ai mở link này cũng vào chung phòng."));
+}
+</script>
+</body>
+</html>
