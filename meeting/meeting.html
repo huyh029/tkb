@@ -19,14 +19,15 @@
     --radius:14px;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;height:100%;}
+  html,body{margin:0;height:100%;overflow:hidden;}
   body{
     font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
     background:radial-gradient(1200px 800px at 20% -10%, #16335e 0%, var(--bg) 60%);
     color:var(--text);
     display:flex;
     flex-direction:column;
-    min-height:100vh;
+    height:100vh;
+    height:100dvh; /* xử lý thanh địa chỉ trình duyệt mobile co giãn */
   }
   header{
     display:flex;align-items:center;justify-content:space-between;
@@ -56,6 +57,8 @@
     background-position:center;
     background-repeat:no-repeat;
     position:relative;
+    overflow-y:auto;
+    min-height:0;
   }
   #lobby::before{
     content:'';position:absolute;inset:0;
@@ -115,7 +118,7 @@
   input[type=text]{
     width:100%;padding:12px 14px;border-radius:10px;
     border:1px solid #26456f;background:#0c1b32;color:var(--text);
-    font-size:15px;outline:none;
+    font-size:16px;outline:none;
   }
   input[type=text]:focus{border-color:var(--accent);}
   .btn-row{display:flex;gap:10px;margin-top:24px;}
@@ -151,7 +154,7 @@
   .my-id-tip b{color:var(--text);}
 
   /* MEETING ROOM */
-  #room{flex:1;display:none;flex-direction:column;overflow:hidden;}
+  #room{flex:1;display:none;flex-direction:column;overflow:hidden;min-height:0;}
   #mainArea{
     flex:1;display:flex;flex-direction:row;justify-content:flex-end;gap:14px;
     padding:20px;overflow:hidden;min-height:0;
@@ -246,7 +249,7 @@
   .edit-popover .ep-avatar img{width:100%;height:100%;object-fit:cover;}
   .edit-popover input[type=text]{
     width:100%;padding:8px 10px;border-radius:8px;
-    border:1px solid #26456f;background:#0c1b32;color:var(--text);font-size:13px;outline:none;
+    border:1px solid #26456f;background:#0c1b32;color:var(--text);font-size:16px;outline:none;
   }
   .edit-popover input[type=text]:focus{border-color:var(--accent);}
   .edit-popover .ep-actions{display:flex;gap:8px;margin-top:10px;}
@@ -260,6 +263,39 @@
     display:flex;align-items:center;justify-content:center;gap:14px;
     padding:18px;background:rgba(23,26,33,0.85);
     border-top:1px solid #1d3a63;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  /* Khi toàn màn hình + đã tự ẩn: control bar mờ đi, chạm vào màn hình để hiện lại */
+  body.fs-mode #controls.fs-hidden{
+    opacity:0;transform:translateY(100%);pointer-events:none;
+  }
+  /* Fullscreen: chỉ tập trung vào nội dung đang share, ẩn hết UI phụ không quan trọng */
+  body.fs-mode header{display:none;}
+  body.fs-mode #room{position:relative;}
+  body.fs-mode #mainArea{
+    padding:0;gap:0;position:absolute;inset:0;
+  }
+  body.fs-mode #memberSidebar,
+  body.fs-mode #memberSidebar.collapsed{
+    display:none;
+  }
+  body.fs-mode #screenArea{
+    border-radius:0;border:none;
+    width:100%;height:100%;
+  }
+  /* Control bar không còn chiếm chỗ trong layout khi fullscreen -> screenArea full 100% */
+  body.fs-mode #controls{
+    position:absolute;left:0;right:0;bottom:0;z-index:20;
+    background:rgba(10,22,40,0.75);backdrop-filter:blur(6px);
+  }
+  body.fs-mode .video-tile.screen-tile .tag{
+    opacity:0;transition:opacity .25s ease;
+  }
+  body.fs-mode:not(.fs-controls-visible) .video-tile.screen-tile .tag{
+    opacity:0;
+  }
+  body.fs-mode.fs-controls-visible .video-tile.screen-tile .tag{
+    opacity:1;
   }
   .ctrl-btn{
     width:52px;height:52px;border-radius:50%;border:1px solid #26456f;
@@ -363,6 +399,7 @@
   <div id="controls">
     <button class="ctrl-btn" id="micBtn" onclick="toggleMic()">🎤</button>
     <button class="ctrl-btn" id="screenBtn" onclick="toggleScreenShare()">🖥️</button>
+    <button class="ctrl-btn" id="fullscreenBtn" onclick="toggleFullscreen()">⛶</button>
     <button class="ctrl-btn leave" onclick="leaveRoom()">📞 Rời cuộc họp</button>
   </div>
 </div>
@@ -377,6 +414,18 @@ let displayName = "Bạn";
 let roomId = "";
 
 const memberListEl = document.getElementById('memberList');
+
+// Hàng đợi các thẻ <audio> bị trình duyệt mobile chặn autoplay,
+// sẽ tự phát ngay khi người dùng chạm/bấm vào màn hình lần đầu.
+let pendingAudioUnlocks = [];
+function unlockPendingAudio(){
+  if(pendingAudioUnlocks.length === 0) return;
+  pendingAudioUnlocks.forEach(el=>{ el.play().catch(()=>{}); });
+  pendingAudioUnlocks = [];
+}
+['touchstart','click'].forEach(evt=>{
+  document.addEventListener(evt, unlockPendingAudio, { passive:true });
+});
 const memberSidebarEl = document.getElementById('memberSidebar');
 
 function toggleSidebar(){
@@ -536,13 +585,15 @@ function openEditPopover(evt){
   `;
   document.body.appendChild(pop);
 
-  // định vị popover gần nút bấm
+  // định vị popover gần nút bấm, đảm bảo không tràn ra ngoài màn hình mobile
   const rect = btn.getBoundingClientRect();
-  const popWidth = 230;
+  const popWidth = Math.min(230, window.innerWidth - 16);
+  pop.style.width = popWidth + 'px';
   let left = rect.left - popWidth + rect.width;
   if(left < 8) left = 8;
+  if(left + popWidth > window.innerWidth - 8) left = window.innerWidth - popWidth - 8;
   let top = rect.bottom + 8;
-  if(top + 180 > window.innerHeight) top = rect.top - 180;
+  if(top + 180 > window.innerHeight) top = Math.max(8, rect.top - 180);
   pop.style.left = left + 'px';
   pop.style.top = top + 'px';
 
@@ -624,6 +675,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const lbl = document.getElementById('fixedRoomLabel');
   if(lbl) lbl.textContent = FIXED_ROOM_ID;
 
+  // Nhiều trình duyệt mobile (đặc biệt Safari iOS, hoặc các app webview như
+  // Facebook/Zalo in-app browser) KHÔNG hỗ trợ chia sẻ màn hình. Ẩn nút đi
+  // để tránh người dùng bấm vào rồi gặp lỗi khó hiểu.
+  const screenBtnEl = document.getElementById('screenBtn');
+  const supportsScreenShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  if(screenBtnEl && !supportsScreenShare){
+    screenBtnEl.style.display = 'none';
+  }
+
+  const fullscreenBtnEl = document.getElementById('fullscreenBtn');
+  if(fullscreenBtnEl && !isFullscreenSupported()){
+    fullscreenBtnEl.style.display = 'none';
+  }
+
   try{
     const savedAvatar = localStorage.getItem(AVATAR_STORAGE_KEY);
     if(savedAvatar){
@@ -673,7 +738,32 @@ async function enterRoom(){
 function tryConnect(asHost){
   const myPeerId = asHost ? roomId : (roomId + '-' + Math.random().toString(36).substring(2,8));
 
-  peer = new Peer(myPeerId, { debug: 1 });
+  // Thêm STUN + TURN công khai để tăng khả năng kết nối qua NAT 4G/mobile,
+  // vốn hay nghiêm ngặt hơn nhiều so với wifi/máy tính.
+  peer = new Peer(myPeerId, {
+    debug: 1,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ]
+    }
+  });
 
   peer.on('open', id=>{
     myId = id;
@@ -722,7 +812,23 @@ function tryConnect(asHost){
       toast("Lỗi kết nối: " + err.type);
     }
   });
+
+  // Mobile hay rớt kết nối khi tắt màn hình / chuyển wifi-4G. Tự reconnect.
+  peer.on('disconnected', ()=>{
+    toast("Mất kết nối, đang tự động kết nối lại...");
+    setTimeout(()=>{
+      if(peer && !peer.destroyed) peer.reconnect();
+    }, 1000);
+  });
 }
+
+// Khi quay lại tab/app trên điện thoại (mở lại màn hình, chuyển app về),
+// kiểm tra và tự reconnect nếu signaling đã bị ngắt.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && peer && peer.disconnected && !peer.destroyed){
+    peer.reconnect();
+  }
+});
 
 function handleAudioCall(call){
   call.on('stream', remoteStream=>{
@@ -753,8 +859,15 @@ function addMemberRow(id, label, isMine, remoteStream, avatar){
   if(remoteStream){
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
+    audioEl.playsInline = true; // bắt buộc trên iOS Safari để không bị chặn / mở fullscreen
     audioEl.srcObject = remoteStream;
     row.appendChild(audioEl);
+    // Một số trình duyệt mobile chặn autoplay nếu chưa có tương tác người dùng;
+    // thử play() thủ công và xếp hàng "mở khóa" khi người dùng chạm vào màn hình.
+    const playPromise = audioEl.play();
+    if(playPromise && playPromise.catch){
+      playPromise.catch(()=> pendingAudioUnlocks.push(audioEl));
+    }
   }
   memberListEl.appendChild(row);
   updateMemberCount();
@@ -789,6 +902,105 @@ function toggleMic(){
   const dot = document.getElementById('mic-me');
   if(dot) dot.classList.toggle('off', !micOn);
 }
+
+// ===== Toàn màn hình (hữu ích trên điện thoại để ẩn thanh địa chỉ trình duyệt) =====
+function isFullscreenSupported(){
+  const el = document.documentElement;
+  return !!(el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || document.exitFullscreen);
+}
+function isCurrentlyFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function toggleFullscreen(){
+  const el = document.documentElement;
+  if(!isCurrentlyFullscreen()){
+    if(el.requestFullscreen) el.requestFullscreen().catch(()=> toast('Không thể bật toàn màn hình trên trình duyệt này'));
+    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if(el.webkitEnterFullscreen) el.webkitEnterFullscreen(); // fallback Safari iOS cũ
+    else toast('Trình duyệt này không hỗ trợ toàn màn hình');
+  }else{
+    if(document.exitFullscreen) document.exitFullscreen();
+    else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+}
+function updateFullscreenBtnIcon(){
+  const btn = document.getElementById('fullscreenBtn');
+  if(!btn) return;
+  btn.textContent = isCurrentlyFullscreen() ? '⛶' : '⛶';
+  btn.classList.toggle('active', isCurrentlyFullscreen());
+}
+
+// ===== Xoay ngang + tự ẩn control bar khi vào toàn màn hình (tối ưu cho mobile) =====
+let controlsHideTimer = null;
+
+function lockLandscapeIfMobile(){
+  try{
+    if(screen.orientation && screen.orientation.lock){
+      screen.orientation.lock('landscape').catch(()=>{
+        // một số trình duyệt (vd Chrome desktop) không cho lock orientation -> bỏ qua im lặng
+      });
+    }
+  }catch(err){ /* không hỗ trợ -> bỏ qua */ }
+}
+function unlockOrientation(){
+  try{
+    if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+  }catch(err){ /* bỏ qua */ }
+}
+
+function scheduleControlsAutoHide(){
+  clearTimeout(controlsHideTimer);
+  const controlsEl = document.getElementById('controls');
+  if(!controlsEl) return;
+  controlsHideTimer = setTimeout(()=>{
+    if(document.body.classList.contains('fs-mode')){
+      controlsEl.classList.add('fs-hidden');
+      document.body.classList.remove('fs-controls-visible');
+    }
+  }, 3000);
+}
+function showControlsTemporarily(){
+  const controlsEl = document.getElementById('controls');
+  if(!controlsEl) return;
+  controlsEl.classList.remove('fs-hidden');
+  document.body.classList.add('fs-controls-visible');
+  if(document.body.classList.contains('fs-mode')) scheduleControlsAutoHide();
+}
+
+document.addEventListener('fullscreenchange', ()=>{
+  updateFullscreenBtnIcon();
+  if(isCurrentlyFullscreen()){
+    document.body.classList.add('fs-mode');
+    document.body.classList.add('fs-controls-visible');
+    lockLandscapeIfMobile();
+    scheduleControlsAutoHide();
+  }else{
+    document.body.classList.remove('fs-mode');
+    document.body.classList.remove('fs-controls-visible');
+    document.getElementById('controls').classList.remove('fs-hidden');
+    clearTimeout(controlsHideTimer);
+    unlockOrientation();
+  }
+});
+document.addEventListener('webkitfullscreenchange', ()=>{
+  updateFullscreenBtnIcon();
+  if(isCurrentlyFullscreen()){
+    document.body.classList.add('fs-mode');
+    document.body.classList.add('fs-controls-visible');
+    lockLandscapeIfMobile();
+    scheduleControlsAutoHide();
+  }else{
+    document.body.classList.remove('fs-mode');
+    document.body.classList.remove('fs-controls-visible');
+    document.getElementById('controls').classList.remove('fs-hidden');
+    clearTimeout(controlsHideTimer);
+    unlockOrientation();
+  }
+});
+
+// Chạm/click vào bất kỳ đâu trong lúc fullscreen -> hiện lại control bar tạm thời
+document.addEventListener('touchstart', ()=>{ if(document.body.classList.contains('fs-mode')) showControlsTemporarily(); }, { passive:true });
+document.addEventListener('click', ()=>{ if(document.body.classList.contains('fs-mode')) showControlsTemporarily(); });
 
 async function toggleScreenShare(){
   if(!isSharingScreen){
