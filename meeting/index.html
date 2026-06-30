@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MeetNow - Video Meeting</title>
+<title>MeetNow - Audio Meeting</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   :root{
@@ -82,12 +82,21 @@
     font-weight:600;font-size:15px;cursor:pointer;
   }
   button.secondary:hover{border-color:var(--accent);}
-  .preview-wrap{
-    position:relative;width:100%;aspect-ratio:16/10;
-    background:#000;border-radius:12px;overflow:hidden;margin-top:18px;
+  .mic-preview-wrap{
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    width:100%;padding:24px 0;
+    background:#11141b;border-radius:12px;margin-top:18px;
     border:1px solid #262a36;
   }
-  #previewVideo{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+  .mic-level-circle{
+    width:80px;height:80px;border-radius:50%;
+    background:var(--panel2);display:flex;align-items:center;justify-content:center;
+    font-size:32px;position:relative;
+  }
+  .mic-level-circle .ring{
+    position:absolute;inset:-6px;border-radius:50%;
+    border:3px solid var(--good);opacity:0;transition:opacity .1s, transform .1s;
+  }
   .my-id-tip{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;}
   .my-id-tip b{color:var(--text);}
 
@@ -95,15 +104,25 @@
   #room{flex:1;display:none;flex-direction:column;}
   #videos{
     flex:1;display:grid;gap:12px;padding:20px;
-    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
     align-content:start;
   }
   .video-tile{
     position:relative;background:#000;border-radius:var(--radius);
     overflow:hidden;border:1px solid #262a36;aspect-ratio:16/10;
+    display:flex;align-items:center;justify-content:center;
   }
-  .video-tile video{width:100%;height:100%;object-fit:cover;}
-  .video-tile.mine video{transform:scaleX(-1);}
+  .video-tile video{width:100%;height:100%;object-fit:contain;background:#000;}
+  .video-tile.screen-tile{grid-column:span 2;aspect-ratio:16/9;background:#000;}
+  .video-tile.audio-only{
+    background:linear-gradient(135deg,#1b2030,#171a21);
+  }
+  .avatar-circle{
+    width:64px;height:64px;border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-size:24px;font-weight:700;color:#fff;
+  }
   .tag{
     position:absolute;left:10px;bottom:10px;
     background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);
@@ -126,6 +145,7 @@
   }
   .ctrl-btn:hover{background:#262b3a;}
   .ctrl-btn.off{background:var(--danger);border-color:var(--danger);}
+  .ctrl-btn.active{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:var(--accent);}
   .ctrl-btn.leave{background:var(--danger);border-color:var(--danger);width:auto;border-radius:26px;padding:0 22px;font-size:15px;font-weight:600;gap:8px;}
   .ctrl-btn.leave:hover{opacity:.9;}
 
@@ -140,6 +160,7 @@
   @media(max-width:560px){
     .card{padding:24px;}
     header{padding:12px 16px;}
+    .video-tile.screen-tile{grid-column:span 1;}
   }
 </style>
 </head>
@@ -159,10 +180,14 @@
 <div id="lobby">
   <div class="card">
     <h1>Bắt đầu hoặc tham gia cuộc họp</h1>
-    <p class="sub">Không cần cài đặt, không cần server riêng — chạy bằng WebRTC + PeerJS công khai.</p>
+    <p class="sub">Cuộc họp âm thanh (mic) — không dùng camera. Không cần cài đặt, không cần server riêng — chạy bằng WebRTC + PeerJS công khai.</p>
 
-    <div class="preview-wrap">
-      <video id="previewVideo" autoplay muted playsinline></video>
+    <div class="mic-preview-wrap">
+      <div class="mic-level-circle">
+        🎤
+        <div class="ring" id="micRing"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);">Kiểm tra micro của bạn</div>
     </div>
 
     <label>Tên của bạn</label>
@@ -184,19 +209,20 @@
   <div id="videos"></div>
   <div id="controls">
     <button class="ctrl-btn" id="micBtn" onclick="toggleMic()">🎤</button>
-    <button class="ctrl-btn" id="camBtn" onclick="toggleCam()">📷</button>
+    <button class="ctrl-btn" id="screenBtn" onclick="toggleScreenShare()">🖥️</button>
     <button class="ctrl-btn leave" onclick="leaveRoom()">📞 Rời cuộc họp</button>
   </div>
 </div>
 
 <script>
-let localStream, peer, myId;
-let connections = {}; // peerId -> {call, video}
-let micOn = true, camOn = true;
+let localStream, screenStream, peer, myId;
+let connections = {};       // peerId -> audio call
+let screenConnections = {}; // peerId -> screen call (outgoing, when I'm sharing)
+let micOn = true;
+let isSharingScreen = false;
 let displayName = "Bạn";
 let roomId = "";
 
-const previewVideo = document.getElementById('previewVideo');
 const videosEl = document.getElementById('videos');
 
 function toast(msg, ms=2500){
@@ -207,16 +233,37 @@ function toast(msg, ms=2500){
   t._tm = setTimeout(()=> t.style.display='none', ms);
 }
 
-// get camera preview on load
-async function initPreview(){
+function initials(name){
+  return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(-2).join('').toUpperCase();
+}
+
+// mic level meter for lobby preview
+let lobbyStream;
+async function initMicPreview(){
   try{
-    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-    previewVideo.srcObject = localStream;
+    lobbyStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(lobbyStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const ring = document.getElementById('micRing');
+    function tick(){
+      if(!document.getElementById('lobby') || document.getElementById('lobby').style.display === 'none') return;
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      const scale = 1 + Math.min(avg/60, 0.6);
+      ring.style.opacity = avg > 8 ? 1 : 0;
+      ring.style.transform = `scale(${scale})`;
+      requestAnimationFrame(tick);
+    }
+    tick();
   }catch(e){
-    toast("Không thể truy cập camera/mic: " + e.message, 4000);
+    toast("Không thể truy cập micro: " + e.message, 4000);
   }
 }
-initPreview();
+initMicPreview();
 
 // check URL for room param
 window.addEventListener('DOMContentLoaded', ()=>{
@@ -243,20 +290,23 @@ function joinRoom(){
 }
 
 async function enterRoom(isHost){
-  if(!localStream){
-    await initPreview();
-    if(!localStream){ toast("Cần cấp quyền camera/mic để vào họp"); return; }
+  if(lobbyStream){
+    localStream = lobbyStream;
+  }else{
+    try{
+      localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    }catch(e){
+      toast("Cần cấp quyền micro để vào họp"); return;
+    }
   }
+
   const n = document.getElementById('nameInput').value.trim();
   if(n) displayName = n;
 
-  // PeerJS public cloud broker server (free, no setup needed) = the "public API"
-  // host id derived deterministically only for the host so others can call it
   const myPeerId = isHost ? roomId : (roomId + '-' + Math.random().toString(36).substring(2,8));
 
   peer = new Peer(myPeerId, {
     debug: 1
-    // uses PeerJS default free cloud signaling server (0.peerjs.com)
   });
 
   peer.on('open', id=>{
@@ -265,19 +315,32 @@ async function enterRoom(isHost){
     document.getElementById('room').style.display = 'flex';
     document.getElementById('roomBadge').style.display = 'flex';
     document.getElementById('roomLabel').textContent = roomId;
-    addVideoTile('me', localStream, displayName + " (Bạn)", true);
+    addAudioTile('me', displayName + " (Bạn)", true);
 
     if(!isHost){
-      // call the host
-      const call = peer.call(roomId, localStream, {metadata:{name:displayName}});
-      handleCall(call);
+      const call = peer.call(roomId, localStream, {metadata:{name:displayName, kind:'audio'}});
+      handleAudioCall(call);
     }
     toast(isHost ? "Đã tạo phòng: " + roomId : "Đã tham gia phòng: " + roomId);
   });
 
   peer.on('call', call=>{
-    call.answer(localStream);
-    handleCall(call);
+    const kind = call.metadata && call.metadata.kind;
+    if(kind === 'screen'){
+      call.answer();
+      call.on('stream', remoteStream=>{
+        const name = (call.metadata && call.metadata.name) || call.peer;
+        addScreenTile(call.peer, remoteStream, name);
+      });
+      call.on('close', ()=> removeTile('screen-'+call.peer));
+    }else{
+      call.answer(localStream);
+      handleAudioCall(call);
+      if(isSharingScreen && screenStream){
+        const sCall = peer.call(call.peer, screenStream, {metadata:{name:displayName, kind:'screen'}});
+        screenConnections[call.peer] = sCall;
+      }
+    }
   });
 
   peer.on('error', err=>{
@@ -292,28 +355,48 @@ async function enterRoom(isHost){
   });
 }
 
-function handleCall(call){
+function handleAudioCall(call){
   call.on('stream', remoteStream=>{
     const name = (call.metadata && call.metadata.name) || call.peer;
-    addVideoTile(call.peer, remoteStream, name, false);
+    addAudioTile(call.peer, name, false, remoteStream);
   });
-  call.on('close', ()=> removeVideoTile(call.peer));
+  call.on('close', ()=>{
+    removeTile('tile-'+call.peer);
+    removeTile('screen-'+call.peer);
+  });
   connections[call.peer] = call;
 }
 
-function addVideoTile(id, stream, label, isMine){
+function addAudioTile(id, label, isMine, remoteStream){
   if(document.getElementById('tile-'+id)) return;
   const tile = document.createElement('div');
-  tile.className = 'video-tile' + (isMine ? ' mine':'');
+  tile.className = 'video-tile audio-only';
   tile.id = 'tile-'+id;
-  tile.innerHTML = `<video autoplay playsinline ${isMine?'muted':''}></video>
+  tile.innerHTML = `<div class="avatar-circle">${initials(label)}</div>
     <div class="tag"><span class="mic-icon" id="mic-${id}"></span>${label}</div>`;
-  tile.querySelector('video').srcObject = stream;
+  if(remoteStream){
+    const audioEl = document.createElement('audio');
+    audioEl.autoplay = true;
+    audioEl.srcObject = remoteStream;
+    tile.appendChild(audioEl);
+  }
   videosEl.appendChild(tile);
 }
 
-function removeVideoTile(id){
-  const t = document.getElementById('tile-'+id);
+function addScreenTile(id, stream, label){
+  const existing = document.getElementById('screen-'+id);
+  if(existing) existing.remove();
+  const tile = document.createElement('div');
+  tile.className = 'video-tile screen-tile';
+  tile.id = 'screen-'+id;
+  tile.innerHTML = `<video autoplay playsinline></video>
+    <div class="tag">🖥️ ${label} đang chia sẻ màn hình</div>`;
+  tile.querySelector('video').srcObject = stream;
+  videosEl.insertBefore(tile, videosEl.firstChild);
+}
+
+function removeTile(domId){
+  const t = document.getElementById(domId);
   if(t) t.remove();
 }
 
@@ -327,15 +410,42 @@ function toggleMic(){
   if(dot) dot.classList.toggle('off', !micOn);
 }
 
-function toggleCam(){
-  if(!localStream) return;
-  camOn = !camOn;
-  localStream.getVideoTracks().forEach(t=> t.enabled = camOn);
-  document.getElementById('camBtn').classList.toggle('off', !camOn);
-  document.getElementById('camBtn').textContent = camOn ? '📷' : '🚫';
+async function toggleScreenShare(){
+  if(!isSharingScreen){
+    try{
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:false });
+    }catch(e){
+      toast("Đã hủy chia sẻ màn hình"); return;
+    }
+    isSharingScreen = true;
+    document.getElementById('screenBtn').classList.add('active');
+    addScreenTile('me', screenStream, displayName + " (Bạn)");
+
+    Object.keys(connections).forEach(peerId=>{
+      const sCall = peer.call(peerId, screenStream, {metadata:{name:displayName, kind:'screen'}});
+      screenConnections[peerId] = sCall;
+    });
+
+    screenStream.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
+  }else{
+    stopScreenShare();
+  }
+}
+
+function stopScreenShare(){
+  isSharingScreen = false;
+  document.getElementById('screenBtn').classList.remove('active');
+  removeTile('screen-me');
+  Object.values(screenConnections).forEach(c=>c.close());
+  screenConnections = {};
+  if(screenStream){
+    screenStream.getTracks().forEach(t=>t.stop());
+    screenStream = null;
+  }
 }
 
 function leaveRoom(){
+  stopScreenShare();
   Object.values(connections).forEach(c=>c.close());
   connections = {};
   if(peer) peer.destroy();
@@ -343,7 +453,6 @@ function leaveRoom(){
   document.getElementById('room').style.display = 'none';
   document.getElementById('roomBadge').style.display = 'none';
   document.getElementById('lobby').style.display = 'flex';
-  initPreview();
 }
 
 function copyLink(){
