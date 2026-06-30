@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeetNow - Video Meeting</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#171a21;
+    --panel2:#1e2230;
+    --accent:#5b8cff;
+    --accent2:#7c5cff;
+    --text:#e9ecf5;
+    --muted:#8a90a3;
+    --danger:#ff5b6e;
+    --good:#3ddc97;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 800px at 20% -10%, #1b2030 0%, var(--bg) 60%);
+    color:var(--text);
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 24px;
+    background:rgba(23,26,33,0.7);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid #262a36;
+  }
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;}
+  .logo .dot{width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));}
+  .room-badge{
+    font-size:13px;color:var(--muted);
+    background:var(--panel2);padding:6px 12px;border-radius:20px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .room-badge button{
+    background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;
+  }
+
+  /* LOBBY */
+  #lobby{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid #262a36;
+    border-radius:var(--radius);
+    padding:36px;
+    width:100%;max-width:420px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.4);
+  }
+  .card h1{margin:0 0 6px;font-size:22px;}
+  .card p.sub{color:var(--muted);margin:0 0 24px;font-size:14px;}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px;margin-top:16px;}
+  input[type=text]{
+    width:100%;padding:12px 14px;border-radius:10px;
+    border:1px solid #2c3140;background:#11141b;color:var(--text);
+    font-size:15px;outline:none;
+  }
+  input[type=text]:focus{border-color:var(--accent);}
+  .btn-row{display:flex;gap:10px;margin-top:24px;}
+  button.primary{
+    flex:1;padding:13px;border:none;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#fff;font-weight:600;font-size:15px;cursor:pointer;
+    transition:transform .15s, opacity .15s;
+  }
+  button.primary:hover{opacity:.92;transform:translateY(-1px);}
+  button.secondary{
+    flex:1;padding:13px;border-radius:10px;
+    background:transparent;border:1px solid #2c3140;color:var(--text);
+    font-weight:600;font-size:15px;cursor:pointer;
+  }
+  button.secondary:hover{border-color:var(--accent);}
+  .preview-wrap{
+    position:relative;width:100%;aspect-ratio:16/10;
+    background:#000;border-radius:12px;overflow:hidden;margin-top:18px;
+    border:1px solid #262a36;
+  }
+  #previewVideo{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+  .my-id-tip{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;}
+  .my-id-tip b{color:var(--text);}
+
+  /* MEETING ROOM */
+  #room{flex:1;display:none;flex-direction:column;}
+  #videos{
+    flex:1;display:grid;gap:12px;padding:20px;
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    align-content:start;
+  }
+  .video-tile{
+    position:relative;background:#000;border-radius:var(--radius);
+    overflow:hidden;border:1px solid #262a36;aspect-ratio:16/10;
+  }
+  .video-tile video{width:100%;height:100%;object-fit:cover;}
+  .video-tile.mine video{transform:scaleX(-1);}
+  .tag{
+    position:absolute;left:10px;bottom:10px;
+    background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);
+    padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;
+    display:flex;align-items:center;gap:6px;
+  }
+  .tag .mic-icon{width:8px;height:8px;border-radius:50%;background:var(--good);}
+  .tag .mic-icon.off{background:var(--danger);}
+
+  #controls{
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    padding:18px;background:rgba(23,26,33,0.85);
+    border-top:1px solid #262a36;
+  }
+  .ctrl-btn{
+    width:52px;height:52px;border-radius:50%;border:1px solid #2c3140;
+    background:var(--panel2);color:var(--text);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:20px;
+    transition:background .15s;
+  }
+  .ctrl-btn:hover{background:#262b3a;}
+  .ctrl-btn.off{background:var(--danger);border-color:var(--danger);}
+  .ctrl-btn.leave{background:var(--danger);border-color:var(--danger);width:auto;border-radius:26px;padding:0 22px;font-size:15px;font-weight:600;gap:8px;}
+  .ctrl-btn.leave:hover{opacity:.9;}
+
+  #toast{
+    position:fixed;top:18px;left:50%;transform:translateX(-50%);
+    background:var(--panel2);border:1px solid #2c3140;padding:10px 18px;
+    border-radius:10px;font-size:13px;display:none;z-index:50;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:#2c3140;border-radius:4px;}
+  @media(max-width:560px){
+    .card{padding:24px;}
+    header{padding:12px 16px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="dot"></span> MeetNow</div>
+  <div class="room-badge" id="roomBadge" style="display:none;">
+    Phòng: <b id="roomLabel"></b>
+    <button onclick="copyLink()">Sao chép link mời</button>
+  </div>
+</header>
+
+<div id="toast"></div>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="card">
+    <h1>Bắt đầu hoặc tham gia cuộc họp</h1>
+    <p class="sub">Không cần cài đặt, không cần server riêng — chạy bằng WebRTC + PeerJS công khai.</p>
+
+    <div class="preview-wrap">
+      <video id="previewVideo" autoplay muted playsinline></video>
+    </div>
+
+    <label>Tên của bạn</label>
+    <input type="text" id="nameInput" placeholder="Nhập tên hiển thị...">
+
+    <label>Mã phòng (để trống nếu tạo phòng mới)</label>
+    <input type="text" id="roomInput" placeholder="Ví dụ: meet-1234">
+
+    <div class="btn-row">
+      <button class="primary" onclick="createRoom()">Tạo phòng mới</button>
+      <button class="secondary" onclick="joinRoom()">Tham gia</button>
+    </div>
+    <div class="my-id-tip">Mẹo: dán mã phòng từ bạn bè vào ô trên rồi bấm <b>Tham gia</b>. Hoặc tạo phòng mới và gửi link cho người khác.</div>
+  </div>
+</div>
+
+<!-- ROOM -->
+<div id="room">
+  <div id="videos"></div>
+  <div id="controls">
+    <button class="ctrl-btn" id="micBtn" onclick="toggleMic()">🎤</button>
+    <button class="ctrl-btn" id="camBtn" onclick="toggleCam()">📷</button>
+    <button class="ctrl-btn leave" onclick="leaveRoom()">📞 Rời cuộc họp</button>
+  </div>
+</div>
+
+<script>
+let localStream, peer, myId;
+let connections = {}; // peerId -> {call, video}
+let micOn = true, camOn = true;
+let displayName = "Bạn";
+let roomId = "";
+
+const previewVideo = document.getElementById('previewVideo');
+const videosEl = document.getElementById('videos');
+
+function toast(msg, ms=2500){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._tm);
+  t._tm = setTimeout(()=> t.style.display='none', ms);
+}
+
+// get camera preview on load
+async function initPreview(){
+  try{
+    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+    previewVideo.srcObject = localStream;
+  }catch(e){
+    toast("Không thể truy cập camera/mic: " + e.message, 4000);
+  }
+}
+initPreview();
+
+// check URL for room param
+window.addEventListener('DOMContentLoaded', ()=>{
+  const params = new URLSearchParams(location.search);
+  const r = params.get('room');
+  if(r) document.getElementById('roomInput').value = r;
+});
+
+function genRoomId(){
+  return 'room-' + Math.random().toString(36).substring(2,8);
+}
+
+function createRoom(){
+  roomId = genRoomId();
+  document.getElementById('roomInput').value = roomId;
+  enterRoom(true);
+}
+
+function joinRoom(){
+  const v = document.getElementById('roomInput').value.trim();
+  if(!v){ toast("Vui lòng nhập mã phòng"); return; }
+  roomId = v;
+  enterRoom(false);
+}
+
+async function enterRoom(isHost){
+  if(!localStream){
+    await initPreview();
+    if(!localStream){ toast("Cần cấp quyền camera/mic để vào họp"); return; }
+  }
+  const n = document.getElementById('nameInput').value.trim();
+  if(n) displayName = n;
+
+  // PeerJS public cloud broker server (free, no setup needed) = the "public API"
+  // host id derived deterministically only for the host so others can call it
+  const myPeerId = isHost ? roomId : (roomId + '-' + Math.random().toString(36).substring(2,8));
+
+  peer = new Peer(myPeerId, {
+    debug: 1
+    // uses PeerJS default free cloud signaling server (0.peerjs.com)
+  });
+
+  peer.on('open', id=>{
+    myId = id;
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('room').style.display = 'flex';
+    document.getElementById('roomBadge').style.display = 'flex';
+    document.getElementById('roomLabel').textContent = roomId;
+    addVideoTile('me', localStream, displayName + " (Bạn)", true);
+
+    if(!isHost){
+      // call the host
+      const call = peer.call(roomId, localStream, {metadata:{name:displayName}});
+      handleCall(call);
+    }
+    toast(isHost ? "Đã tạo phòng: " + roomId : "Đã tham gia phòng: " + roomId);
+  });
+
+  peer.on('call', call=>{
+    call.answer(localStream);
+    handleCall(call);
+  });
+
+  peer.on('error', err=>{
+    console.error(err);
+    if(err.type === 'unavailable-id'){
+      toast("Mã phòng đã được sử dụng, hãy thử tên khác hoặc dùng 'Tham gia'");
+    }else if(err.type === 'peer-unavailable'){
+      toast("Không tìm thấy phòng này. Kiểm tra lại mã phòng.");
+    }else{
+      toast("Lỗi kết nối: " + err.type);
+    }
+  });
+}
+
+function handleCall(call){
+  call.on('stream', remoteStream=>{
+    const name = (call.metadata && call.metadata.name) || call.peer;
+    addVideoTile(call.peer, remoteStream, name, false);
+  });
+  call.on('close', ()=> removeVideoTile(call.peer));
+  connections[call.peer] = call;
+}
+
+function addVideoTile(id, stream, label, isMine){
+  if(document.getElementById('tile-'+id)) return;
+  const tile = document.createElement('div');
+  tile.className = 'video-tile' + (isMine ? ' mine':'');
+  tile.id = 'tile-'+id;
+  tile.innerHTML = `<video autoplay playsinline ${isMine?'muted':''}></video>
+    <div class="tag"><span class="mic-icon" id="mic-${id}"></span>${label}</div>`;
+  tile.querySelector('video').srcObject = stream;
+  videosEl.appendChild(tile);
+}
+
+function removeVideoTile(id){
+  const t = document.getElementById('tile-'+id);
+  if(t) t.remove();
+}
+
+function toggleMic(){
+  if(!localStream) return;
+  micOn = !micOn;
+  localStream.getAudioTracks().forEach(t=> t.enabled = micOn);
+  document.getElementById('micBtn').classList.toggle('off', !micOn);
+  document.getElementById('micBtn').textContent = micOn ? '🎤' : '🔇';
+  const dot = document.getElementById('mic-me');
+  if(dot) dot.classList.toggle('off', !micOn);
+}
+
+function toggleCam(){
+  if(!localStream) return;
+  camOn = !camOn;
+  localStream.getVideoTracks().forEach(t=> t.enabled = camOn);
+  document.getElementById('camBtn').classList.toggle('off', !camOn);
+  document.getElementById('camBtn').textContent = camOn ? '📷' : '🚫';
+}
+
+function leaveRoom(){
+  Object.values(connections).forEach(c=>c.close());
+  connections = {};
+  if(peer) peer.destroy();
+  videosEl.innerHTML = '';
+  document.getElementById('room').style.display = 'none';
+  document.getElementById('roomBadge').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+  initPreview();
+}
+
+function copyLink(){
+  const url = location.origin + location.pathname + '?room=' + encodeURIComponent(roomId);
+  navigator.clipboard.writeText(url).then(()=> toast("Đã sao chép link mời!"));
+}
+</script>
+</body>
+</html>
