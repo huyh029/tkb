@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MeetNow - Audio Meeting</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<link rel="icon" type="image/png" href="icon.png">
 <style>
   :root{
     --bg:#0a1628;
@@ -297,6 +298,42 @@
   body.fs-mode.fs-controls-visible .video-tile.screen-tile .tag{
     opacity:1;
   }
+
+  /* ===== Mobile: tự động mô phỏng chế độ toàn màn hình khi vào phòng họp ===== */
+  /* Không cần gọi Fullscreen API thật (hay bị chặn/không hỗ trợ trên mobile),
+     mà mô phỏng bằng CSS: ẩn header + sidebar, screen share phủ kín 100vw/100vh
+     với object-fit:cover, thanh điều khiển tự ẩn và chỉ hiện khi chạm màn hình. */
+  body.mobile-immersive header{display:none;}
+  body.mobile-immersive #room{position:relative;}
+  body.mobile-immersive #mainArea{
+    padding:0;gap:0;position:fixed;inset:0;
+    width:100vw;height:100vh;z-index:5;
+  }
+  body.mobile-immersive #memberSidebar,
+  body.mobile-immersive #memberSidebar.collapsed{
+    display:none;
+  }
+  body.mobile-immersive #screenArea{
+    border-radius:0;border:none;
+    width:100vw;height:100vh;
+  }
+  body.mobile-immersive .video-tile.screen-tile video{
+    width:100vw;height:100vh;object-fit:cover;
+  }
+  body.mobile-immersive #controls{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:rgba(10,22,40,0.75);backdrop-filter:blur(6px);
+  }
+  body.mobile-immersive #controls.fs-hidden{
+    opacity:0;transform:translateY(100%);pointer-events:none;
+  }
+  body.mobile-immersive .video-tile.screen-tile .tag{
+    opacity:0;transition:opacity .25s ease;
+  }
+  body.mobile-immersive.fs-controls-visible .video-tile.screen-tile .tag{
+    opacity:1;
+  }
+
   .ctrl-btn{
     width:52px;height:52px;border-radius:50%;border:1px solid #26456f;
     background:var(--panel2);color:var(--text);cursor:pointer;
@@ -448,6 +485,11 @@ function toast(msg, ms=2500){
 
 function initials(name){
   return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(-2).join('').toUpperCase();
+}
+
+// ===== Phát hiện thiết bị di động =====
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod|Mobi|Windows Phone/i.test(navigator.userAgent) || window.innerWidth <= 768;
 }
 
 // mic level meter for lobby preview
@@ -688,6 +730,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(fullscreenBtnEl && !isFullscreenSupported()){
     fullscreenBtnEl.style.display = 'none';
   }
+  // Trên mobile ta tự mô phỏng toàn màn hình bằng CSS ngay khi vào phòng
+  // (xem enterRoom/mobile-immersive), nên không cần nút bật toàn màn hình thật nữa.
+  if(fullscreenBtnEl && isMobileDevice()){
+    fullscreenBtnEl.style.display = 'none';
+  }
 
   try{
     const savedAvatar = localStorage.getItem(AVATAR_STORAGE_KEY);
@@ -772,6 +819,14 @@ function tryConnect(asHost){
     document.getElementById('roomBadge').style.display = 'flex';
     document.getElementById('roomLabel').textContent = roomId;
     addMemberRow('me', displayName + " (Bạn)", true, null, avatarDataUrl);
+
+    // Trên điện thoại: tự động mô phỏng chế độ toàn màn hình ngay khi vào phòng
+    // (ẩn header/sidebar, control bar tự ẩn sau vài giây, chạm màn hình để hiện lại).
+    if(isMobileDevice()){
+      document.body.classList.add('mobile-immersive');
+      document.body.classList.add('fs-controls-visible');
+      scheduleControlsAutoHide();
+    }
 
     if(!asHost){
       const call = peer.call(roomId, localStream, {metadata:{name:displayName, kind:'audio', avatar:avatarDataUrl}});
@@ -933,6 +988,10 @@ function updateFullscreenBtnIcon(){
 // ===== Xoay ngang + tự ẩn control bar khi vào toàn màn hình (tối ưu cho mobile) =====
 let controlsHideTimer = null;
 
+function isImmersiveActive(){
+  return document.body.classList.contains('fs-mode') || document.body.classList.contains('mobile-immersive');
+}
+
 function lockLandscapeIfMobile(){
   try{
     if(screen.orientation && screen.orientation.lock){
@@ -953,7 +1012,7 @@ function scheduleControlsAutoHide(){
   const controlsEl = document.getElementById('controls');
   if(!controlsEl) return;
   controlsHideTimer = setTimeout(()=>{
-    if(document.body.classList.contains('fs-mode')){
+    if(isImmersiveActive()){
       controlsEl.classList.add('fs-hidden');
       document.body.classList.remove('fs-controls-visible');
     }
@@ -964,7 +1023,7 @@ function showControlsTemporarily(){
   if(!controlsEl) return;
   controlsEl.classList.remove('fs-hidden');
   document.body.classList.add('fs-controls-visible');
-  if(document.body.classList.contains('fs-mode')) scheduleControlsAutoHide();
+  if(isImmersiveActive()) scheduleControlsAutoHide();
 }
 
 document.addEventListener('fullscreenchange', ()=>{
@@ -998,9 +1057,10 @@ document.addEventListener('webkitfullscreenchange', ()=>{
   }
 });
 
-// Chạm/click vào bất kỳ đâu trong lúc fullscreen -> hiện lại control bar tạm thời
-document.addEventListener('touchstart', ()=>{ if(document.body.classList.contains('fs-mode')) showControlsTemporarily(); }, { passive:true });
-document.addEventListener('click', ()=>{ if(document.body.classList.contains('fs-mode')) showControlsTemporarily(); });
+// Chạm/click vào bất kỳ đâu trong lúc toàn màn hình (thật hoặc mô phỏng trên mobile)
+// -> hiện lại control bar tạm thời
+document.addEventListener('touchstart', ()=>{ if(isImmersiveActive()) showControlsTemporarily(); }, { passive:true });
+document.addEventListener('click', ()=>{ if(isImmersiveActive()) showControlsTemporarily(); });
 
 async function toggleScreenShare(){
   if(!isSharingScreen){
@@ -1046,6 +1106,12 @@ function leaveRoom(){
   document.getElementById('room').style.display = 'none';
   document.getElementById('roomBadge').style.display = 'none';
   document.getElementById('lobby').style.display = 'flex';
+
+  // reset trạng thái toàn màn hình mô phỏng trên mobile
+  document.body.classList.remove('mobile-immersive');
+  document.body.classList.remove('fs-controls-visible');
+  document.getElementById('controls').classList.remove('fs-hidden');
+  clearTimeout(controlsHideTimer);
 }
 
 function copyLink(){
