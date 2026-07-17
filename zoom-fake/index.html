@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Zoom Meeting</title>
+<style>
+  :root{
+    --bar-h: 56px;
+    --tile-h: 108px;
+    --green: #17e070;
+    --zoom-blue: #2D8CFF;
+    --panel: #1c1c1e;
+    --panel-2: #232326;
+    --avatar-bg: #3a3a3c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    width:100%;height:100%;
+    background:#000;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow:hidden;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  #app{
+    position:fixed;inset:0;
+    display:flex;flex-direction:column;
+    background:#000;
+  }
+
+  /* ---------- fake browser chrome (optional, toggled off by default) ---------- */
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    height:52px;
+    background:#000;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 20px;
+    flex-shrink:0;
+  }
+  .logo{
+    color:#fff;font-weight:700;font-size:15px;line-height:1.1;letter-spacing:.2px;
+  }
+  .logo .brand{display:block;font-size:16px;font-weight:800;}
+  .logo .sub{display:block;font-size:12px;font-weight:400;color:#cfcfcf;}
+  .top-right{
+    display:flex;align-items:center;gap:16px;color:#d7d7d7;font-size:13px;
+  }
+  .rec-dot{
+    width:9px;height:9px;border-radius:50%;background:#ff3b30;
+    display:inline-block;margin-right:6px;
+    animation:pulse 1.4s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .clock{font-variant-numeric: tabular-nums;}
+  .icon-btn{
+    width:30px;height:30px;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;
+    color:#d7d7d7;cursor:pointer;
+  }
+  .icon-btn:hover{background:#242424;}
+
+  /* ---------- filmstrip of small participant tiles ---------- */
+  .filmstrip-container{
+    display:flex;gap:8px;padding:6px 20px 10px;
+    flex-shrink:0;
+    align-items:center;
+  }
+  .filmstrip{
+    display:flex;gap:8px;
+    flex:1;
+    min-width:0;
+    height:var(--tile-h);
+  }
+  .strip-tile{
+    position:relative;
+    width:170px;height:var(--tile-h);
+    border-radius:8px;overflow:hidden;
+    flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);
+  }
+  .tile-avatar-circle{
+    width:64px;height:64px;border-radius:50%;
+    overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.35);
+    flex-shrink:0;
+    background:var(--avatar-bg);
+  }
+  .initials-fallback{
+    text-shadow:0 1px 2px rgba(0,0,0,.25);
+  }
+  .tile-avatar-circle img{
+    width:100%;height:100%;object-fit:cover;
+  }
+  .tile-avatar-circle .initials-fallback{
+    color:#fff;font-size:24px;font-weight:700;
+  }
+  .strip-tile .name-tag{
+    position:absolute;left:8px;bottom:8px;
+    background:rgba(0,0,0,.55);
+    color:#fff;font-size:12px;padding:3px 8px 3px 6px;
+    border-radius:5px;
+    display:flex;align-items:center;gap:5px;
+    max-width:calc(100% - 16px);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .mic-ico{width:11px;height:11px;flex-shrink:0;opacity:.9;}
+  .strip-more{
+    width:34px;height:var(--tile-h);
+    display:flex;align-items:center;justify-content:center;
+    color:#cfcfcf;flex-shrink:0;
+    cursor:pointer;
+    font-size:22px;
+    border-radius:8px;
+  }
+  .strip-more:hover{
+    background:#242424;
+  }
+  .strip-more.hidden{
+    display:none;
+  }
+
+  /* ---------- main stage ---------- */
+  .stage-wrap{
+    flex:1;
+    display:flex;align-items:center;justify-content:center;
+    padding:0 20px 16px;
+    min-height:0;
+  }
+  .stage{
+    position:relative;
+    width:100%;height:100%;
+    max-width:1180px;
+    border-radius:10px;
+    border:3px solid var(--green);
+    overflow:hidden;
+    background: radial-gradient(ellipse at 30% 20%, #3a4a52, #1c2226 60%);
+    display:flex;align-items:flex-end;
+  }
+  .stage .name-tag{
+    position:absolute;left:16px;bottom:16px;
+    background:rgba(0,0,0,.55);
+    color:#fff;font-size:15px;padding:6px 12px 6px 10px;
+    border-radius:6px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .stage .avatar-center{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    flex-direction:column;
+    gap:18px;
+    width:100%;
+    height:100%;
+  }
+  .big-avatar{
+    width:190px;height:190px;border-radius:50%;
+    background: var(--avatar-bg);
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-size:64px;font-weight:700;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    overflow:hidden;
+  }
+  .big-avatar img{
+    width:100%;height:100%;object-fit:cover;
+  }
+  .waving{
+    position:absolute;
+    font-size:70px;
+    right:22%;
+    top:28%;
+    animation: wave 1.1s infinite;
+    transform-origin: 70% 70%;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.35));
+    display: none;
+  }
+  @keyframes wave{
+    0%{transform:rotate(0deg);}
+    15%{transform:rotate(18deg);}
+    30%{transform:rotate(-8deg);}
+    45%{transform:rotate(18deg);}
+    60%{transform:rotate(-4deg);}
+    100%{transform:rotate(0deg);}
+  }
+  .stage-name{
+    color:#e9e9e9;font-size:15px;font-weight:500;
+  }
+
+  /* ---------- bottom toolbar ---------- */
+  .toolbar{
+    height:var(--bar-h);
+    background:#000;
+    display:flex;align-items:center;justify-content:space-between;
+    gap:6px;
+    flex-shrink:0;
+    padding-bottom:2px;
+  }
+  .toolbar-center{
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    flex:1;
+  }
+  .tool{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#e6e6e6;
+    width:74px;height:100%;
+    font-size:11px;
+    cursor:pointer;
+    gap:3px;
+    border-radius:4px;
+  }
+  .tool:hover{background:#1c1c1c;}
+  .tool svg{width:20px;height:20px;}
+  .tool.end{
+    background:#e02d2d;
+    border-radius:6px;
+    width:70px;height:36px;
+    align-self:center;
+    flex-direction:row;
+    gap:6px;
+    margin-right:20px;
+  }
+  .tool.end:hover{background:#c72424;}
+  .tool.leave-label{font-size:12px;}
+  .green{color:var(--green)!important;}
+
+  /* ---------- settings screen ---------- */
+  #settingsScreen{
+    position:fixed;inset:0;
+    background:rgba(0,0,0,0.95);
+    display:flex;align-items:center;justify-content:center;
+    z-index:1000;
+  }
+  #settingsScreen.hidden{
+    display:none;
+  }
+  .settings-container{
+    background:var(--panel);
+    border-radius:12px;
+    padding:40px;
+    max-width:500px;
+    width:90%;
+    color:#fff;
+  }
+  .settings-title{
+    font-size:24px;font-weight:700;margin-bottom:30px;
+    text-align:center;
+  }
+  .setting-group{
+    margin-bottom:25px;
+  }
+  .setting-label{
+    font-size:13px;color:#e6e6e6;margin-bottom:8px;
+    display:block;font-weight:500;
+  }
+  .setting-select{
+    width:100%;padding:10px 12px;
+    background:var(--panel-2);
+    border:1px solid #404040;
+    border-radius:6px;
+    color:#fff;font-size:13px;
+    cursor:pointer;
+  }
+  .setting-select:hover{
+    border-color:#505050;
+  }
+  .setting-select option{
+    background:var(--panel-2);color:#fff;
+  }
+  .preview-box{
+    width:100%;aspect-ratio:16/9;
+    background:var(--panel-2);
+    border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:20px;
+    overflow:hidden;
+  }
+  .preview-avatar{
+    width:80px;height:80px;border-radius:50%;
+    background:var(--avatar-bg);
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-size:32px;font-weight:700;
+  }
+  .button-group{
+    display:flex;gap:12px;margin-top:30px;
+  }
+  .btn{
+    flex:1;padding:12px 16px;
+    border-radius:6px;border:none;
+    font-size:14px;font-weight:600;
+    cursor:pointer;
+    transition:all 0.2s;
+  }
+  .btn-primary{
+    background:var(--green);color:#000;
+  }
+  .btn-primary:hover{
+    background:#12d058;
+  }
+  .btn-secondary{
+    background:var(--panel-2);color:#fff;
+    border:1px solid #404040;
+  }
+  .btn-secondary:hover{
+    background:#2a2a2d;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="logo">
+      <span class="brand">zoom</span>
+      <span class="sub">Workplace</span>
+    </div>
+    <div class="top-right">
+      <span><span class="rec-dot"></span>Recording</span>
+      <span class="clock" id="clock">00:00</span>
+    </div>
+  </div>
+
+  <div class="filmstrip-container" id="filmstripContainer">
+    <div class="strip-more" id="prevPageBtn" style="display:none;">‹</div>
+    <div class="filmstrip" id="filmstrip"></div>
+    <div class="strip-more" id="nextPageBtn">›</div>
+  </div>
+
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <div class="avatar-center">
+        <video id="videoPlayer" width="100%" height="100%" style="border-radius:8px;object-fit:cover;" controls>
+        </video>
+      </div>
+      <div class="stage-name" id="mainName">Đang chờ máy chủ phản hồi…</div>
+      <span class="waving">👋</span>
+      <div class="name-tag">
+        <svg class="mic-ico" viewBox="0 0 24 24" fill="#ff5555"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a1 1 0 00-2 0 5 5 0 01-10 0 1 1 0 00-2 0 7 7 0 006 6.93V20H9a1 1 0 000 2h6a1 1 0 000-2h-2v-2.07A7 7 0 0019 11z"/></svg>
+        <span id="hostNameTag">Host đang chia sẻ màn hình</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-center">
+      <div class="tool"><svg viewBox="0 0 24 24" fill="#ff5555"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a1 1 0 00-2 0 5 5 0 01-10 0 1 1 0 00-2 0 7 7 0 006 6.93V20H9a1 1 0 000 2h6a1 1 0 000-2h-2v-2.07A7 7 0 0019 11z"/><line x1="3" y1="3" x2="21" y2="21" stroke="#ff5555" stroke-width="2.4"/></svg>Bật mic</div>
+      <div class="tool"><svg viewBox="0 0 24 24" fill="#ff5555"><path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/><line x1="3" y1="3" x2="21" y2="21" stroke="#ff5555" stroke-width="2.4"/></svg>Bắt đầu Video</div>
+      <div class="tool"><svg viewBox="0 0 24 24" fill="#fff"><circle cx="7" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="17" cy="12" r="2"/></svg>Người tham gia</div>
+      <div class="tool"><svg viewBox="0 0 24 24" fill="#fff"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg>Trò chuyện</div>
+      <div class="tool"><svg viewBox="0 0 24 24" fill="#fff"><path d="M13 3l-9 9h5v9l9-9h-5z"/></svg>Chia sẻ MH</div>
+      <div class="tool"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm1 15h-2v-2h2zm0-4h-2V7h2z"/></svg>Ghi lại</div>
+    </div>
+    <div class="tool end">
+      <span class="leave-label">Kết thúc</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ====== DỰ PHÒNG (dùng khi mở file trực tiếp bằng cách double-click, ======
+  // ====== trình duyệt sẽ chặn fetch() đọc members.json qua file://)     ======
+  const FALLBACK_DATA = {
+    host: { name: "Bạn", avatar: "" },
+    participants: [
+      { name: "PGS. TS. N...", avatar: "", muted: false },
+      { name: "Vũ Quốc Duy",   avatar: "", muted: true  },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      { name: "Tuấn Anh",  avatar: "https://i.pravatar.cc/300?img=12", muted: true },
+      { name: "Minh Hằng", avatar: "https://i.pravatar.cc/300?img=32", muted: true },
+      { name: "Đức Thắng", avatar: "https://i.pravatar.cc/300?img=15", muted: true },
+      { name: "Ngọc Bích", avatar: "https://i.pravatar.cc/300?img=45", muted: true },
+      { name: "Quang Huy", avatar: "https://i.pravatar.cc/300?img=8",  muted: true },
+      { name: "Thu Trang", avatar: "https://i.pravatar.cc/300?img=47", muted: true },
+      
+    ]
+  };
+
+  function initials(name){
+    return name.trim().split(/\s+/).slice(-2).map(w=>w[0]).join("").toUpperCase();
+  }
+
+  function normalizeUrl(url){
+    if(!url) return "";
+    if(url.startsWith("://")) return "https" + url;
+    return url;
+  }
+
+  const colors = ["#e17055","#6c5ce7","#00b894","#0984e3","#e84393","#fdcb6e","#00cec9","#d63031"];
+  
+  function extractYouTubeVideoId(url){
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?\n]*).*/;
+    const match = url.match(regExp);
+    return (match && match[7].length === 11) ? match[7] : null;
+  }
+
+  function setYouTubeVideo(youtubeUrl){
+    const videoId = extractYouTubeVideoId(youtubeUrl);
+    if(videoId){
+      const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`;
+      document.getElementById('youtubePlayer').src = embedUrl;
+    }
+  }
+
+  let tilesPerPage = 0;
+  let allTiles = [];
+
+  function calculateTilesPerPage(){
+    const container = document.getElementById('filmstripContainer');
+    const containerWidth = container.offsetWidth;
+    const tileWidth = 170 + 8; // tile width + gap
+    const buttonWidth = 34 + 8; // button width + gap
+    const padding = 40; // 20px mỗi bên
+    
+    const availableWidth = containerWidth - buttonWidth - padding;
+    tilesPerPage = Math.max(1, Math.floor(availableWidth / tileWidth));
+  }
+
+  function renderPage(){
+    const strip = document.getElementById('filmstrip');
+    strip.innerHTML = '';
+    
+    const start = currentPage * tilesPerPage;
+    const end = start + tilesPerPage;
+    const visibleTiles = allTiles.slice(start, end);
+    
+    visibleTiles.forEach(tile => {
+      strip.appendChild(tile);
+    });
+
+    // Cập nhật nút navigation
+    const nextBtn = document.getElementById('nextPageBtn');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const totalPages = Math.ceil(allTiles.length / tilesPerPage);
+    
+    if(currentPage > 0){
+      prevBtn.style.display = 'flex';
+    } else {
+      prevBtn.style.display = 'none';
+    }
+    
+    if(currentPage < totalPages - 1){
+      nextBtn.style.display = 'flex';
+    } else {
+      nextBtn.style.display = 'none';
+    }
+  }
+
+  document.getElementById('nextPageBtn').addEventListener('click', () => {
+    const totalPages = Math.ceil(allTiles.length / tilesPerPage);
+    if(currentPage < totalPages - 1){
+      currentPage++;
+      renderPage();
+    }
+  });
+
+  document.getElementById('prevPageBtn').addEventListener('click', () => {
+    if(currentPage > 0){
+      currentPage--;
+      renderPage();
+    }
+  });
+
+  function makeAvatarCircle(name, avatarUrl, bgColor, size){
+    const circle = document.createElement('div');
+    circle.className = 'tile-avatar-circle';
+    if(bgColor){ circle.style.background = bgColor; }
+    if(size){ circle.style.width = size+'px'; circle.style.height = size+'px'; }
+
+    const normalizedUrl = normalizeUrl(avatarUrl);
+    if(normalizedUrl){
+      const img = document.createElement('img');
+      img.src = normalizedUrl;
+      img.alt = name;
+      img.onerror = function(){
+        img.remove();
+        const fb = document.createElement('div');
+        fb.className = 'initials-fallback';
+        fb.textContent = initials(name);
+        circle.appendChild(fb);
+      };
+      circle.appendChild(img);
+    } else {
+      const fb = document.createElement('div');
+      fb.className = 'initials-fallback';
+      fb.textContent = initials(name);
+      circle.appendChild(fb);
+    }
+    return circle;
+  }
+
+  function buildUI(data){
+    const hostName = (data.host && data.host.name) || "Bạn";
+    const hostAvatar = (data.host && data.host.avatar) || "";
+    const participants = data.participants || [];
+
+    // build tiles for all participants
+    allTiles = [];
+    participants.forEach((p,i)=>{
+      const name = p.name || `Người dùng ${i+1}`;
+      const avatar = p.avatar || "";
+      const muted = p.muted !== false;
+
+      const el = document.createElement('div');
+      el.className = 'strip-tile';
+      if(!muted){ el.style.border = "3px solid var(--green)"; }
+
+      const circle = makeAvatarCircle(name, avatar, colors[i % colors.length]);
+      el.appendChild(circle);
+
+      const micSvg = muted
+        ? `<svg class="mic-ico" viewBox="0 0 24 24" fill="#ff5555"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a1 1 0 00-2 0 5 5 0 01-10 0 1 1 0 00-2 0 7 7 0 006 6.93V20H9a1 1 0 000 2h6a1 1 0 000-2h-2v-2.07A7 7 0 0019 11z"/><line x1="3" y1="3" x2="21" y2="21" stroke="#ff5555" stroke-width="2.4"/></svg>`
+        : `<svg class="mic-ico" viewBox="0 0 24 24" fill="#17e070"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a1 1 0 00-2 0 5 5 0 01-10 0 1 1 0 00-2 0 7 7 0 006 6.93V20H9a1 1 0 000 2h6a1 1 0 000-2h-2v-2.07A7 7 0 0019 11z"/></svg>`;
+
+      const nameTag = document.createElement('div');
+      nameTag.className = 'name-tag';
+      nameTag.innerHTML = `${micSvg}<span></span>`;
+      nameTag.querySelector('span').textContent = name;
+      el.appendChild(nameTag);
+
+      allTiles.push(el);
+    });
+    
+    // Calculate tiles per page và render trang đầu
+    calculateTilesPerPage();
+    currentPage = 0;
+    renderPage();
+
+    // main stage - không cần update mainAvatar vì dùng YouTube video
+    document.getElementById('mainName').textContent = "Đang kết nối lại…";
+    document.getElementById('hostNameTag').textContent = "Host đang chia sẻ màn hình";
+  }
+
+  // Thử tải members.json (cần chạy qua local server, vd: python3 -m http.server)
+  // Nếu fetch fail, dùng FALLBACK_DATA
+  buildUI(FALLBACK_DATA);
+
+  // Set random start time (8-10 minutes)
+  // ====== VIDEO CHUNKS LOADER - Dùng File Input ======
+  
+</script>
+
+<script>
+const videoChunks = [
+  'vid_chunk_001.bin',
+  'vid_chunk_002.bin',
+  'vid_chunk_003.bin',
+  'vid_chunk_004.bin',
+  'vid_chunk_005.bin',
+  'vid_chunk_006.bin',
+  'vid_chunk_007.bin',
+  'vid_chunk_008.bin',
+  'vid_chunk_009.bin',
+  'vid_chunk_010.bin',
+  'vid_chunk_011.bin',
+  'vid_chunk_012.bin',
+  'vid_chunk_013.bin',
+  'vid_chunk_014.bin'
+];
+
+async function loadVideo() {
+    try {
+        // Tải tất cả các chunk
+        const buffers = await Promise.all(
+            videoChunks.map(async (file) => {
+                const res = await fetch(file);
+                if (!res.ok) {
+                    throw new Error(`Không tải được ${file}`);
+                }
+                return res.arrayBuffer();
+            })
+        );
+
+        // Ghép thành một Blob
+        const videoBlob = new Blob(buffers, {
+            type: 'video/mp4'
+        });
+
+        // Gán vào thẻ video
+        const video = document.getElementById('videoPlayer');
+        video.src = URL.createObjectURL(videoBlob);
+
+        // Tùy chọn
+        video.load();
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+loadVideo();
+</script>
+</body>
+</html>
